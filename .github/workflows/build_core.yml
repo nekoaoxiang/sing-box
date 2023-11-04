@@ -1,0 +1,47 @@
+name: Build sing-box core
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sing-box
+        uses: actions/checkout@v4
+        with:
+          ref: dev-next
+          path: sing-box
+          fetch-depth: 0
+
+      - name: Get latest go version 
+        id: version 
+        run: | 
+          echo go_version=$(curl -s https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | grep -oE '"version": "[0-9]{1}.[0-9]{1,}(.[0-9]{1,})?"' | head -1 | cut -d':' -f2 | sed 's/ //g; s/"//g') >> $GITHUB_OUTPUT 
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ steps.version.outputs.go_version }}
+          check-latest: true
+          cache-dependency-path: |
+            ./sing-box/go.sum
+
+      - name: Get version and code
+        run: |
+          cd sing-box
+          VERSION_NAME=$(CGO_ENABLED=0 go run ./cmd/internal/read_tag)
+          echo ${VERSION_NAME}
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+
+      - name: build sing-box
+        run: |
+          cd sing-box
+          CGO_ENABLED=0 GOOS="android" GOARCH="arm64" TAGS="with_quic,with_grpc,with_ech,with_utls,with_reality_server,with_clash_api,with_gvisor,with_proxyprovider" make build
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: sing-box-${{ env.VERSION_NAME }}
+          path: ./sing-box/sing-box
