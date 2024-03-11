@@ -54,6 +54,10 @@ jobs:
           VERSION_NAME=$(CGO_ENABLED=0 go run ./cmd/internal/read_tag)
           VERSION_CODE=$(date +%y%m%d)
           TAG_CODE=$(($(curl --silent "https://api.github.com/repos/nekoaoxiang/sing-box/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')+1))
+          if [ $TAG_CODE -ge 10004 ]
+          then
+            TAG_CODE=10000
+          fi
           echo ${VERSION_NAME}
           echo ${VERSION_CODE}
           echo ${TAG_CODE}
