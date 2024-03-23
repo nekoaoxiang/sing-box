@@ -105,7 +105,7 @@ jobs:
           echo ALIAS_NAME="aoxiang1221" >> local.properties
           echo ALIAS_PASS="12345678" >> local.properties
 
-          ./gradlew :app:clean :app:assemblePlayRelease :app:assembleOtherRelease
+          ./gradlew :app:assemblePlayRelease :app:assembleOtherRelease
 
       - name: Release and upload assets
         uses: svenstaro/upload-release-action@v2
