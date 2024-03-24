@@ -43,7 +43,7 @@ jobs:
       - name: Setup Java 
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '22'
           distribution: 'oracle'
           check-latest: true
           cache: 'gradle'
@@ -105,7 +105,7 @@ jobs:
           echo ALIAS_NAME="aoxiang1221" >> local.properties
           echo ALIAS_PASS="12345678" >> local.properties
 
-          ./gradlew :app:assemblePlayRelease :app:assembleOtherRelease
+          ./gradlew :app:assemblePlayRelease :app:assembleOtherRelease --debug
 
       - name: Release and upload assets
         uses: svenstaro/upload-release-action@v2
