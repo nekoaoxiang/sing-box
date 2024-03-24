@@ -24,7 +24,7 @@ jobs:
       - name: Checkout sing-box-for-android
         uses: actions/checkout@v4
         with:
-          ref: sfa
+          repository: SagerNet/sing-box-for-android
           path: sing-box-for-android
 
       - name: Get latest go version 
@@ -43,7 +43,7 @@ jobs:
       - name: Setup Java 
         uses: actions/setup-java@v4
         with:
-          java-version: '22'
+          java-version: '21'
           distribution: 'oracle'
           check-latest: true
           cache: 'gradle'
