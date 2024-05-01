@@ -1,0 +1,123 @@
+name: Build DSB
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: repo
+
+      - name: Checkout sing-box
+        uses: actions/checkout@v4
+        with:
+          ref: dev-next
+          path: sing-box
+          fetch-depth: 0
+
+      - name: Checkout sing-box-for-android
+        uses: actions/checkout@v4
+        with:
+          repository: SagerNet/sing-box-for-android
+          ref: main
+          path: sing-box-for-android
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            ./sing-box/go.sum
+
+      - name: Setup Java 
+        uses: actions/setup-java@v4
+        with:
+          java-version: '23'
+          distribution: 'zulu'
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+
+      - name: Get sing-box version and code
+        run: |
+          cd sing-box
+          VERSION_NAME=$(CGO_ENABLED=0 go run ./cmd/internal/read_tag)
+          VERSION_CODE=$(date +%y%m%d)
+          TAG_CODE=$(($(curl --silent "https://api.github.com/repos/nekoaoxiang/sing-box/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')+1))
+          if [ $TAG_CODE -ge 10004 ]
+          then
+            TAG_CODE=10000
+          fi
+          echo ${VERSION_NAME}
+          echo ${VERSION_CODE}
+          echo ${TAG_CODE}
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+          echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
+          echo "TAG_CODE=${TAG_CODE}" >> $GITHUB_ENV
+
+      - name: Build sing-box aar
+        run: |
+          cd sing-box
+          make lib_install
+          TAGS="with_quic,with_ech,with_utls,with_reality_server,with_clash_api"
+          CGO_ENABLED=1 gomobile bind -v -androidapi 21 -javapkg=io.nekohasekai -libname=box -trimpath -ldflags "-X github.com/sagernet/sing-box/constant.Version=${{ env.VERSION_NAME }} -s -w -buildid=" -tags ${TAGS} ./experimental/libbox
+
+      - name: Move aar file and modify some files
+        run: |
+          mkdir ./sing-box-for-android/app/libs
+          cp ./sing-box/libbox.aar ./sing-box-for-android/app/libs
+
+          rm -rf ./sing-box-for-android/app/release.keystore
+          cp ./repo/dsb/release.keystore ./sing-box-for-android/app
+
+          sed -i 's/applicationId "io.nekohasekai.sfa"/applicationId "com.github.aoxiang.dsb"/' ./sing-box-for-android/app/build.gradle
+
+          sed -i 's/android:targetPackage="io.nekohasekai.sfa"/android:targetPackage="com.github.aoxiang.dsb"/' ./sing-box-for-android/app/src/main/res/xml/shortcuts.xml
+
+          sed -i 's/<string name="app_name">sing-box<\/string>/<string name="app_name">DSB<\/string>/' ./sing-box-for-android/app/src/main/res/values/strings.xml
+
+          sed -i 's/<string name="app_name">sing-box<\/string>/<string name="app_name">DSB<\/string>/' ./sing-box-for-android/app/src/main/res/values-zh-rCN/strings.xml
+
+      - name: Build dsb apk
+        run: |
+          cd ./sing-box-for-android
+
+          rm -rf version.properties
+          touch local.properties
+          touch version.properties
+
+          echo VERSION_NAME=${{ env.VERSION_NAME }} >> version.properties
+          echo VERSION_CODE=${{ env.VERSION_CODE }} >> version.properties
+          echo GO_VERSION=go${{ steps.version.outputs.go_version }} >> version.properties
+
+          echo KEYSTORE_PASS="12345678" >> local.properties
+          echo ALIAS_NAME="aoxiang1221" >> local.properties
+          echo ALIAS_PASS="12345678" >> local.properties
+
+          ./gradlew :app:assemblePlayRelease :app:assembleOtherRelease --no-daemon --debug
+
+      - name: Release and upload assets
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          release_name: ${{ env.VERSION_NAME }}
+          tag: ${{ env.TAG_CODE }}
+          file_glob: true
+          file: ./sing-box-for-android/app/build/outputs/apk/*/release/*.apk
+
+      - name: Remove old releases
+        uses: dev-drprasad/delete-older-releases@v0.3.2
+        with:
+          keep_latest: 3
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

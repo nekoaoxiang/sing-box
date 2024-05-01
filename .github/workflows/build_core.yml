@@ -1,0 +1,48 @@
+name: Build sing-box core
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sing-box
+        uses: actions/checkout@v4
+        with:
+          ref: dev-next
+          path: sing-box
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: |
+            ./sing-box/go.sum
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27
+
+      - name: Get version and code
+        run: |
+          cd sing-box
+          VERSION_NAME=$(CGO_ENABLED=0 go run ./cmd/internal/read_tag)
+          echo ${VERSION_NAME}
+          echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
+
+      - name: build sing-box
+        run: |
+          cd sing-box
+          TAGS="with_quic,with_dhcp,with_wireguard,with_ech,with_utls,with_clash_api,with_gvisor"
+          CGO_ENABLED=1 GOOS="android" GOARCH="arm64" TAGS=${TAGS} CC=${{steps.setup-ndk.outputs.ndk-path}}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang make build
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sing-box-${{ env.VERSION_NAME }}
+          path: ./sing-box/sing-box
