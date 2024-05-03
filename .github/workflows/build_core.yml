@@ -15,23 +15,17 @@ jobs:
           path: sing-box
           fetch-depth: 0
 
-      - name: Get latest go version 
-        id: version 
-        run: | 
-          echo go_version=$(curl -s https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | grep -oE '"version": "[0-9]{1}.[0-9]{1,}(.[0-9]{1,})?"' | head -1 | cut -d':' -f2 | sed 's/ //g; s/"//g') >> $GITHUB_OUTPUT 
-
       - name: Setup Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.version.outputs.go_version }}
-          check-latest: true
+          go-version: stable
           cache-dependency-path: |
             ./sing-box/go.sum
 
       - name: Setup Java 
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '22'
           distribution: 'oracle'
 
       - name: Setup NDK
@@ -54,7 +48,7 @@ jobs:
           CGO_ENABLED=1 GOOS="android" GOARCH="arm64" TAGS=${TAGS} CC=${{steps.setup-ndk.outputs.ndk-path}}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang make build
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: sing-box-${{ env.VERSION_NAME }}
           path: ./sing-box/sing-box
