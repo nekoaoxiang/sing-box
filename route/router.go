@@ -851,15 +851,15 @@ func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata ad
 		)
 		if sniffMetadata != nil {
 			metadata.Protocol = sniffMetadata.Protocol
-			metadata.Domain = sniffMetadata.Domain
-			if metadata.InboundOptions.SniffOverrideDestination && M.IsDomainName(metadata.Domain) {
+			metadata.SniffDomain = sniffMetadata.Domain
+			if metadata.InboundOptions.SniffOverrideDestination && M.IsDomainName(sniffMetadata.Domain) {
 				metadata.Destination = M.Socksaddr{
-					Fqdn: metadata.Domain,
+					Fqdn: sniffMetadata.Domain,
 					Port: metadata.Destination.Port,
 				}
 			}
-			if metadata.Domain != "" {
-				r.logger.DebugContext(ctx, "sniffed protocol: ", metadata.Protocol, ", domain: ", metadata.Domain)
+			if sniffMetadata.Domain != "" {
+				r.logger.DebugContext(ctx, "sniffed protocol: ", metadata.Protocol, ", domain: ", sniffMetadata.Domain)
 			} else {
 				r.logger.DebugContext(ctx, "sniffed protocol: ", metadata.Protocol)
 			}
@@ -986,15 +986,15 @@ func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, m
 			)
 			if sniffMetadata != nil {
 				metadata.Protocol = sniffMetadata.Protocol
-				metadata.Domain = sniffMetadata.Domain
-				if metadata.InboundOptions.SniffOverrideDestination && M.IsDomainName(metadata.Domain) {
+				metadata.SniffDomain = sniffMetadata.Domain
+				if metadata.InboundOptions.SniffOverrideDestination && M.IsDomainName(sniffMetadata.Domain) {
 					metadata.Destination = M.Socksaddr{
-						Fqdn: metadata.Domain,
+						Fqdn: sniffMetadata.Domain,
 						Port: metadata.Destination.Port,
 					}
 				}
-				if metadata.Domain != "" {
-					r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol, ", domain: ", metadata.Domain)
+				if sniffMetadata.Domain != "" {
+					r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol, ", domain: ", sniffMetadata.Domain)
 				} else {
 					r.logger.DebugContext(ctx, "sniffed packet protocol: ", metadata.Protocol)
 				}
