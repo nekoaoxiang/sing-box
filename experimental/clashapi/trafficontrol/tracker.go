@@ -26,6 +26,7 @@ type TrackerMetadata struct {
 	Rule         adapter.Rule
 	Outbound     string
 	OutboundType string
+	SniffHost   string
 }
 
 func (t TrackerMetadata) MarshalJSON() ([]byte, error) {
