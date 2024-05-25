@@ -57,6 +57,7 @@ func NewRemoteRuleSet(ctx context.Context, router adapter.Router, logger logger.
 			ctx:    ctx,
 			cancel: cancel,
 			tag:    options.Tag,
+			pType:  "remote",
 			path:   options.Path,
 			format: options.Format,
 		},
@@ -71,6 +72,10 @@ func NewRemoteRuleSet(ctx context.Context, router adapter.Router, logger logger.
 
 func (s *RemoteRuleSet) Name() string {
 	return s.tag
+}
+
+func (s *RemoteRuleSet) Update(router adapter.Router) error {
+	return s.fetchOnce(s.ctx, nil)
 }
 
 func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext adapter.RuleSetStartContext) error {
@@ -89,7 +94,7 @@ func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext adapter.R
 		dialer = outbound
 	}
 	s.dialer = dialer
-	s.loadFromFile(s.router)
+	s.loadFromFile(s.router, true)
 	s.lastUpdated = s.updatedTime
 	if s.lastUpdated.IsZero() {
 		err := s.fetchOnce(ctx, startContext)
