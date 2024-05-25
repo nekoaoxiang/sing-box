@@ -2,6 +2,7 @@ package trafficontrol
 
 import (
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -34,6 +35,12 @@ func (t TrackerMetadata) MarshalJSON() ([]byte, error) {
 		inbound = t.Metadata.InboundType + "/" + t.Metadata.Inbound
 	} else {
 		inbound = t.Metadata.InboundType
+	}
+	var addr netip.Addr
+	if len(t.Metadata.DestinationAddresses) > 0 {
+		addr = t.Metadata.DestinationAddresses[0]
+	} else {
+		addr = t.Metadata.Destination.Addr
 	}
 	var domain string
 	if t.Metadata.Domain != "" {
@@ -70,7 +77,7 @@ func (t TrackerMetadata) MarshalJSON() ([]byte, error) {
 			"network":         t.Metadata.Network,
 			"type":            inbound,
 			"sourceIP":        t.Metadata.Source.Addr,
-			"destinationIP":   t.Metadata.Destination.Addr,
+			"destinationIP":   addr,
 			"sourcePort":      t.Metadata.Source.Port,
 			"destinationPort": t.Metadata.Destination.Port,
 			"host":            domain,
