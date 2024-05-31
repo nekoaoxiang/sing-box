@@ -32,6 +32,7 @@ type TransportOptions struct {
 	Dialer       N.Dialer
 	Address      []string
 	ClientSubnet netip.Prefix
+	Insecure     bool
 }
 
 var transports map[string]TransportConstructor

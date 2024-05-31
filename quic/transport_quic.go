@@ -34,6 +34,7 @@ type Upstream struct {
 	ctx        context.Context
 	dialer     N.Dialer
 	serverAddr M.Socksaddr
+	insecure   bool
 
 	access     sync.Mutex
 	connection quic.EarlyConnection
@@ -55,6 +56,7 @@ func NewUpstream(options dns.UpstreamOptions) (*Upstream, error) {
 		ctx:        options.Context,
 		dialer:     options.Dialer,
 		serverAddr: serverAddr,
+		insecure:   options.Insecure,
 	}, nil
 }
 
@@ -93,7 +95,7 @@ func (t *Upstream) openConnection() (quic.EarlyConnection, error) {
 		t.ctx,
 		bufio.NewUnbindPacketConn(conn),
 		t.serverAddr.UDPAddr(),
-		&tls.Config{ServerName: t.serverAddr.AddrString(), NextProtos: []string{"doq"}},
+		&tls.Config{ServerName: t.serverAddr.AddrString(), NextProtos: []string{"doq"}, InsecureSkipVerify: t.insecure},
 		nil,
 	)
 	if err != nil {

@@ -132,6 +132,7 @@ type UpstreamOptions struct {
 	Dialer       N.Dialer
 	Address      string
 	ClientSubnet netip.Prefix
+	Insecure bool
 }
 
 func baseTransportConstructor(options TransportOptions) (Transport, error) {

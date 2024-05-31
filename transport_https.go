@@ -41,7 +41,8 @@ func NewHTTPSUpstream(options UpstreamOptions) *HTTPSUpstream {
 				return options.Dialer.DialContext(ctx, network, M.ParseSocksaddr(addr))
 			},
 			TLSClientConfig: &tls.Config{
-				NextProtos: []string{"dns"},
+				NextProtos:         []string{"dns"},
+				InsecureSkipVerify: options.Insecure,
 			},
 		},
 	}

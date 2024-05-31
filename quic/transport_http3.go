@@ -53,7 +53,8 @@ func NewHTTP3Upstream(options dns.UpstreamOptions) (*HTTP3Upstream, error) {
 				return quic.DialEarly(ctx, bufio.NewUnbindPacketConn(conn), conn.RemoteAddr(), tlsCfg, cfg)
 			},
 			TLSClientConfig: &tls.Config{
-				NextProtos: []string{"dns"},
+				NextProtos:         []string{"dns"},
+				InsecureSkipVerify: options.Insecure,
 			},
 		},
 	}, nil
