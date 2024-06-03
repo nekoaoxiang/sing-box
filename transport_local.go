@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/sagernet/sing/common"
+	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 
@@ -16,7 +17,7 @@ import (
 
 func init() {
 	RegisterTransport([]string{"local"}, func(options TransportOptions) (Transport, error) {
-		return NewLocalTransport(options), nil
+		return NewLocalTransport(options)
 	})
 }
 
@@ -27,7 +28,10 @@ type LocalTransport struct {
 	resolver net.Resolver
 }
 
-func NewLocalTransport(options TransportOptions) *LocalTransport {
+func NewLocalTransport(options TransportOptions) (*LocalTransport, error) {
+	if len(options.Address) > 1 {
+		return nil, E.New("system transport can only be used alone")
+	}
 	return &LocalTransport{
 		name: options.Name,
 		resolver: net.Resolver{
@@ -35,7 +39,7 @@ func NewLocalTransport(options TransportOptions) *LocalTransport {
 				return options.Dialer.DialContext(ctx, N.NetworkName(network), M.ParseSocksaddr(address))
 			},
 		},
-	}
+	}, nil
 }
 
 func (t *LocalTransport) Name() string {
