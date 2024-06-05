@@ -84,9 +84,6 @@ jobs:
 
           sed -i 's/<string name="app_name">sing-box<\/string>/<string name="app_name">DSB<\/string>/' ./sing-box-for-android/app/src/main/res/values/strings.xml
 
-          rm -rf ./sing-box-for-android/app/src/main/res/values-zh-rCN/strings.xml
-          cp ./repo/dsb/strings.xml ./sing-box-for-android/app/src/main/res/values-zh-rCN
-
       - name: Build dsb apk
         run: |
           cd ./sing-box-for-android
@@ -103,7 +100,7 @@ jobs:
           echo ALIAS_NAME="aoxiang1221" >> local.properties
           echo ALIAS_PASS="12345678" >> local.properties
 
-          ./gradlew :app:assemblePlayRelease :app:assembleOtherRelease --debug
+          ./gradlew :app:assemblePlayRelease :app:assembleOtherRelease --no-daemon
 
       - name: Release and upload assets
         uses: svenstaro/upload-release-action@v2
