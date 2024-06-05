@@ -24,29 +24,27 @@ jobs:
       - name: Checkout sing-box-for-android
         uses: actions/checkout@v4
         with:
-          repository: SagerNet/sing-box-for-android
+          ref: sfa
           path: sing-box-for-android
-
-      - name: Get latest go version 
-        id: version 
-        run: | 
-          echo go_version=$(curl -s https://raw.githubusercontent.com/actions/go-versions/main/versions-manifest.json | grep -oE '"version": "[0-9]{1}.[0-9]{1,}(.[0-9]{1,})?"' | head -1 | cut -d':' -f2 | sed 's/ //g; s/"//g') >> $GITHUB_OUTPUT
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ steps.version.outputs.go_version }}
-          check-latest: true
+          go-version: stable
           cache-dependency-path: |
             ./sing-box/go.sum
 
       - name: Setup Java 
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '22'
           distribution: 'oracle'
-          check-latest: true
-          cache: 'gradle'
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26b
 
       - name: Get sing-box version and code
         run: |
