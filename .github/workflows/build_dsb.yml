@@ -37,7 +37,7 @@ jobs:
       - name: Setup Java 
         uses: actions/setup-java@v4
         with:
-          java-version: '22'
+          java-version: '21'
           distribution: 'oracle'
 
       - name: Setup NDK
