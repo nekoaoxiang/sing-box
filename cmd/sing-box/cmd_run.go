@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/common/betterjson"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
@@ -57,7 +58,11 @@ func readConfigAt(path string) (*OptionsEntry, error) {
 	if err != nil {
 		return nil, E.Cause(err, "read config at ", path)
 	}
-	options, err := json.UnmarshalExtended[option.Options](configContent)
+	content, err := betterjson.PreConvert(configContent)
+	if err != nil {
+		return nil, E.Cause(err, "decode config at ", path)
+	}
+	options, err := json.UnmarshalExtended[option.Options](content)
 	if err != nil {
 		return nil, E.Cause(err, "decode config at ", path)
 	}

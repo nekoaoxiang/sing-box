@@ -3,6 +3,7 @@ package provider
 import (
 	"strings"
 
+	"github.com/sagernet/sing-box/common/betterjson"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -12,10 +13,11 @@ func (p *myProviderAdapter) newParser(content string) ([]option.Outbound, error)
 	var outbounds []option.Outbound
 	var err error
 	switch true {
-	case strings.Contains(content, "\"outbounds\""):
+	case strings.Contains(content, "outbounds"):
 		var options option.OutboundProviderOptions
-		err = options.UnmarshalJSON([]byte(content))
-		if err != nil {
+		if parsedContent, err := betterjson.PreConvert([]byte(content)); err != nil {
+			return nil, E.Cause(err, "decode config at ")
+		} else if err := options.UnmarshalJSON(parsedContent); err != nil {
 			return nil, E.Cause(err, "decode config at ")
 		}
 		outbounds = options.Outbounds
