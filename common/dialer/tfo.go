@@ -75,10 +75,19 @@ func (c *slowOpenConn) Write(b []byte) (n int, err error) {
 		return c.conn.Write(b)
 	default:
 	}
-	c.conn, err = c.dialer.DialContext(c.ctx, c.network, c.destination.String(), b)
-	if err != nil {
+	connChan := make(chan TCPConn, 3)
+	for i := 0; i < 3; i++ {
+		go func() {
+			var tcpConn TCPConn
+			tcpConn.conn, tcpConn.err = c.dialer.DialContext(c.ctx, c.network, c.destination.String(), b)
+			connChan <- tcpConn
+		}()
+	}
+	if tcpConn := GetTCPConn(connChan); tcpConn.err != nil {
 		c.conn = nil
-		c.err = E.Cause(err, "dial tcp fast open")
+		c.err = E.Cause(tcpConn.err, "dial tcp fast open")
+	} else {
+		c.conn = tcpConn.conn
 	}
 	n = len(b)
 	close(c.create)
