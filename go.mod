@@ -53,7 +53,7 @@ require (
 	howett.net/plist v1.0.1
 )
 
-//replace github.com/sagernet/sing => ../sing
+replace github.com/sagernet/sing-dns v0.3.0-beta.5 => github.com/nekoaoxiang/sing-box v0.0.0-20240616130823-d7d92aff1a44
 
 require (
 	github.com/ajg/form v1.5.1 // indirect
