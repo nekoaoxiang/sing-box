@@ -84,6 +84,8 @@ jobs:
 
           sed -i 's/<string name="app_name">sing-box<\/string>/<string name="app_name">DSB<\/string>/' ./sing-box-for-android/app/src/main/res/values/strings.xml
 
+          sed -i 's/<string name="app_name">sing-box<\/string>/<string name="app_name">DSB<\/string>/' ./sing-box-for-android/app/src/main/res/values-zh-rCN/strings.xml
+
       - name: Build dsb apk
         run: |
           cd ./sing-box-for-android
