@@ -25,7 +25,10 @@ type RCodeTransport struct {
 }
 
 func NewRCodeTransport(options TransportOptions) (*RCodeTransport, error) {
-	serverURL, err := url.Parse(options.Address)
+	if len(options.Address) > 1 {
+		return nil, E.New("rcode cannot be used with other dns address")
+	}
+	serverURL, err := url.Parse(options.Address[0])
 	if err != nil {
 		return nil, err
 	}

@@ -22,28 +22,26 @@ import (
 	mDNS "github.com/miekg/dns"
 )
 
-var _ dns.Transport = (*HTTP3Transport)(nil)
+var _ dns.Upstream = (*HTTP3Upstream)(nil)
 
 func init() {
-	dns.RegisterTransport([]string{"h3"}, func(options dns.TransportOptions) (dns.Transport, error) {
-		return NewHTTP3Transport(options)
+	dns.RegisterUpstream([]string{"h3"}, func(options dns.UpstreamOptions) (dns.Upstream, error) {
+		return NewHTTP3Upstream(options)
 	})
 }
 
-type HTTP3Transport struct {
-	name        string
+type HTTP3Upstream struct {
 	destination string
 	transport   *http3.RoundTripper
 }
 
-func NewHTTP3Transport(options dns.TransportOptions) (*HTTP3Transport, error) {
+func NewHTTP3Upstream(options dns.UpstreamOptions) (*HTTP3Upstream, error) {
 	serverURL, err := url.Parse(options.Address)
 	if err != nil {
 		return nil, err
 	}
 	serverURL.Scheme = "https"
-	return &HTTP3Transport{
-		name:        options.Name,
+	return &HTTP3Upstream{
 		destination: serverURL.String(),
 		transport: &http3.RoundTripper{
 			Dial: func(ctx context.Context, addr string, tlsCfg *tls.Config, cfg *quic.Config) (quic.EarlyConnection, error) {
@@ -61,27 +59,19 @@ func NewHTTP3Transport(options dns.TransportOptions) (*HTTP3Transport, error) {
 	}, nil
 }
 
-func (t *HTTP3Transport) Name() string {
-	return t.name
-}
-
-func (t *HTTP3Transport) Start() error {
+func (t *HTTP3Upstream) Start() error {
 	return nil
 }
 
-func (t *HTTP3Transport) Reset() {
+func (t *HTTP3Upstream) Reset() {
 	_ = t.transport.Close()
 }
 
-func (t *HTTP3Transport) Close() error {
+func (t *HTTP3Upstream) Close() error {
 	return t.transport.Close()
 }
 
-func (t *HTTP3Transport) Raw() bool {
-	return true
-}
-
-func (t *HTTP3Transport) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, error) {
+func (t *HTTP3Upstream) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, error) {
 	exMessage := *message
 	exMessage.Id = 0
 	exMessage.Compress = true
@@ -129,6 +119,6 @@ func (t *HTTP3Transport) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS
 	return &responseMessage, nil
 }
 
-func (t *HTTP3Transport) Lookup(ctx context.Context, domain string, strategy dns.DomainStrategy) ([]netip.Addr, error) {
+func (t *HTTP3Upstream) Lookup(ctx context.Context, domain string, strategy dns.DomainStrategy) ([]netip.Addr, error) {
 	return nil, os.ErrInvalid
 }

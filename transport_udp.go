@@ -19,15 +19,15 @@ import (
 	"github.com/miekg/dns"
 )
 
-var _ Transport = (*UDPTransport)(nil)
+var _ Upstream = (*UDPUpstream)(nil)
 
 func init() {
-	RegisterTransport([]string{"udp", ""}, func(options TransportOptions) (Transport, error) {
-		return NewUDPTransport(options)
+	RegisterUpstream([]string{"udp", ""}, func(options UpstreamOptions) (Upstream, error) {
+		return NewUDPUpstream(options)
 	})
 }
 
-type UDPTransport struct {
+type UDPUpstream struct {
 	name         string
 	optCtx       context.Context
 	ctx          context.Context
@@ -37,12 +37,12 @@ type UDPTransport struct {
 	serverAddr   M.Socksaddr
 	clientAddr   netip.Prefix
 	udpSize      int
-	tcpTransport *TCPTransport
+	tcpUpstream *TCPUpstream
 	access       sync.Mutex
 	conn         *dnsConnection
 }
 
-func NewUDPTransport(options TransportOptions) (*UDPTransport, error) {
+func NewUDPUpstream(options UpstreamOptions) (*UDPUpstream, error) {
 	var serverAddr M.Socksaddr
 	if serverURL, err := url.Parse(options.Address); err != nil || serverURL.Scheme == "" {
 		serverAddr = M.ParseSocksaddr(options.Address)
@@ -56,7 +56,7 @@ func NewUDPTransport(options TransportOptions) (*UDPTransport, error) {
 		serverAddr.Port = 53
 	}
 	ctx, cancel := context.WithCancel(options.Context)
-	return &UDPTransport{
+	return &UDPUpstream{
 		name:         options.Name,
 		optCtx:       options.Context,
 		ctx:          ctx,
@@ -66,49 +66,49 @@ func NewUDPTransport(options TransportOptions) (*UDPTransport, error) {
 		serverAddr:   serverAddr,
 		clientAddr:   options.ClientSubnet,
 		udpSize:      512,
-		tcpTransport: newTCPTransport(options, serverAddr),
+		tcpUpstream: newTCPUpstream(options, serverAddr),
 	}, nil
 }
 
-func (t *UDPTransport) Name() string {
+func (t *UDPUpstream) Name() string {
 	return t.name
 }
 
-func (t *UDPTransport) Start() error {
+func (t *UDPUpstream) Start() error {
 	return nil
 }
 
-func (t *UDPTransport) Reset() {
+func (t *UDPUpstream) Reset() {
 	t.cancel()
 	t.ctx, t.cancel = context.WithCancel(t.optCtx)
 }
 
-func (t *UDPTransport) Close() error {
+func (t *UDPUpstream) Close() error {
 	t.cancel()
 	return nil
 }
 
-func (t *UDPTransport) Raw() bool {
+func (t *UDPUpstream) Raw() bool {
 	return true
 }
 
-func (t *UDPTransport) Lookup(ctx context.Context, domain string, strategy DomainStrategy) ([]netip.Addr, error) {
+func (t *UDPUpstream) Lookup(ctx context.Context, domain string, strategy DomainStrategy) ([]netip.Addr, error) {
 	return nil, os.ErrInvalid
 }
 
-func (t *UDPTransport) Exchange(ctx context.Context, message *dns.Msg) (*dns.Msg, error) {
+func (t *UDPUpstream) Exchange(ctx context.Context, message *dns.Msg) (*dns.Msg, error) {
 	response, err := t.exchange(ctx, message)
 	if err != nil {
 		return nil, err
 	}
 	if response.Truncated {
 		t.logger.InfoContext(ctx, "response truncated, retrying with TCP")
-		return t.tcpTransport.Exchange(ctx, message)
+		return t.tcpUpstream.Exchange(ctx, message)
 	}
 	return response, nil
 }
 
-func (t *UDPTransport) exchange(ctx context.Context, message *dns.Msg) (*dns.Msg, error) {
+func (t *UDPUpstream) exchange(ctx context.Context, message *dns.Msg) (*dns.Msg, error) {
 	conn, err := t.open(ctx)
 	if err != nil {
 		return nil, err
@@ -164,7 +164,7 @@ func (t *UDPTransport) exchange(ctx context.Context, message *dns.Msg) (*dns.Msg
 	}
 }
 
-func (t *UDPTransport) open(ctx context.Context) (*dnsConnection, error) {
+func (t *UDPUpstream) open(ctx context.Context) (*dnsConnection, error) {
 	connection := t.conn
 	if connection != nil && !common.Done(connection.ctx) {
 		return connection, nil
@@ -191,7 +191,7 @@ func (t *UDPTransport) open(ctx context.Context) (*dnsConnection, error) {
 	return connection, nil
 }
 
-func (t *UDPTransport) recvLoop(conn *dnsConnection) {
+func (t *UDPUpstream) recvLoop(conn *dnsConnection) {
 	var group task.Group
 	group.Append0(func(ctx context.Context) error {
 		for {

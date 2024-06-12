@@ -17,15 +17,15 @@ import (
 	"github.com/miekg/dns"
 )
 
-var _ Transport = (*TLSTransport)(nil)
+var _ Upstream = (*TLSUpstream)(nil)
 
 func init() {
-	RegisterTransport([]string{"tls"}, func(options TransportOptions) (Transport, error) {
-		return NewTLSTransport(options)
+	RegisterUpstream([]string{"tls"}, func(options UpstreamOptions) (Upstream, error) {
+		return NewTLSUpstream(options)
 	})
 }
 
-type TLSTransport struct {
+type TLSUpstream struct {
 	name        string
 	dialer      N.Dialer
 	logger      logger.ContextLogger
@@ -39,7 +39,7 @@ type tlsDNSConn struct {
 	queryId uint16
 }
 
-func NewTLSTransport(options TransportOptions) (*TLSTransport, error) {
+func NewTLSUpstream(options UpstreamOptions) (*TLSUpstream, error) {
 	serverURL, err := url.Parse(options.Address)
 	if err != nil {
 		return nil, err
@@ -51,11 +51,11 @@ func NewTLSTransport(options TransportOptions) (*TLSTransport, error) {
 	if serverAddr.Port == 0 {
 		serverAddr.Port = 853
 	}
-	return newTLSTransport(options, serverAddr), nil
+	return newTLSUpstream(options, serverAddr), nil
 }
 
-func newTLSTransport(options TransportOptions, serverAddr M.Socksaddr) *TLSTransport {
-	return &TLSTransport{
+func newTLSUpstream(options UpstreamOptions, serverAddr M.Socksaddr) *TLSUpstream {
+	return &TLSUpstream{
 		name:       options.Name,
 		dialer:     options.Dialer,
 		logger:     options.Logger,
@@ -63,15 +63,15 @@ func newTLSTransport(options TransportOptions, serverAddr M.Socksaddr) *TLSTrans
 	}
 }
 
-func (t *TLSTransport) Name() string {
+func (t *TLSUpstream) Name() string {
 	return t.name
 }
 
-func (t *TLSTransport) Start() error {
+func (t *TLSUpstream) Start() error {
 	return nil
 }
 
-func (t *TLSTransport) Reset() {
+func (t *TLSUpstream) Reset() {
 	t.access.Lock()
 	defer t.access.Unlock()
 	for connection := t.connections.Front(); connection != nil; connection = connection.Next() {
@@ -80,16 +80,16 @@ func (t *TLSTransport) Reset() {
 	t.connections.Init()
 }
 
-func (t *TLSTransport) Close() error {
+func (t *TLSUpstream) Close() error {
 	t.Reset()
 	return nil
 }
 
-func (t *TLSTransport) Raw() bool {
+func (t *TLSUpstream) Raw() bool {
 	return true
 }
 
-func (t *TLSTransport) Exchange(ctx context.Context, message *dns.Msg) (*dns.Msg, error) {
+func (t *TLSUpstream) Exchange(ctx context.Context, message *dns.Msg) (*dns.Msg, error) {
 	t.access.Lock()
 	conn := t.connections.PopFront()
 	t.access.Unlock()
@@ -114,7 +114,7 @@ func (t *TLSTransport) Exchange(ctx context.Context, message *dns.Msg) (*dns.Msg
 	return t.exchange(message, &tlsDNSConn{Conn: tlsConn})
 }
 
-func (t *TLSTransport) exchange(message *dns.Msg, conn *tlsDNSConn) (*dns.Msg, error) {
+func (t *TLSUpstream) exchange(message *dns.Msg, conn *tlsDNSConn) (*dns.Msg, error) {
 	messageId := message.Id
 	conn.queryId++
 	message.Id = conn.queryId
@@ -135,6 +135,6 @@ func (t *TLSTransport) exchange(message *dns.Msg, conn *tlsDNSConn) (*dns.Msg, e
 	return response, nil
 }
 
-func (t *TLSTransport) Lookup(ctx context.Context, domain string, strategy DomainStrategy) ([]netip.Addr, error) {
+func (t *TLSUpstream) Lookup(ctx context.Context, domain string, strategy DomainStrategy) ([]netip.Addr, error) {
 	return nil, os.ErrInvalid
 }

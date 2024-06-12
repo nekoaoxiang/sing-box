@@ -13,6 +13,7 @@ import (
 )
 
 type TransportConstructor = func(options TransportOptions) (Transport, error)
+type UpstreamConstructor = func(options UpstreamOptions) (Upstream, error)
 
 type Transport interface {
 	Name() string
@@ -29,11 +30,12 @@ type TransportOptions struct {
 	Logger       logger.ContextLogger
 	Name         string
 	Dialer       N.Dialer
-	Address      string
+	Address      []string
 	ClientSubnet netip.Prefix
 }
 
 var transports map[string]TransportConstructor
+var upstreams map[string]UpstreamConstructor
 
 func RegisterTransport(schemes []string, constructor TransportConstructor) {
 	if transports == nil {
@@ -44,18 +46,35 @@ func RegisterTransport(schemes []string, constructor TransportConstructor) {
 	}
 }
 
+func RegisterUpstream(schemes []string, constructor UpstreamConstructor) {
+	if upstreams == nil {
+		upstreams = make(map[string]UpstreamConstructor)
+	}
+	for _, scheme := range schemes {
+		upstreams[scheme] = constructor
+	}
+}
+
 func CreateTransport(options TransportOptions) (Transport, error) {
-	constructor := transports[options.Address]
-	if constructor == nil {
-		serverURL, _ := url.Parse(options.Address)
+	var constructor TransportConstructor
+	for _, address := range options.Address {
+		if constructor = transports[address]; constructor != nil {
+			break
+		}
+		serverURL, _ := url.Parse(options.Address[0])
 		var scheme string
 		if serverURL != nil {
 			scheme = serverURL.Scheme
 		}
-		constructor = transports[scheme]
+		if constructor = transports[scheme]; constructor != nil {
+			break
+		}
+		if upstreams[scheme] == nil {
+			return nil, E.New("unknown DNS server format: " + address)
+		}
 	}
 	if constructor == nil {
-		return nil, E.New("unknown DNS server format: " + options.Address)
+		constructor = baseTransportConstructor
 	}
 	options.Context = contextWithTransportName(options.Context, options.Name)
 	transport, err := constructor(options)

@@ -27,7 +27,7 @@ func TestTransports(t *testing.T) {
 			transport, err := dns.CreateTransport(dns.TransportOptions{
 				Context: context.Background(),
 				Logger:  logger.NOP(),
-				Address: serverAddress,
+				Address: []string{serverAddress},
 				Dialer:  N.SystemDialer,
 			})
 			require.NoError(t, err)

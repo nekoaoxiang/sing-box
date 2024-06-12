@@ -19,23 +19,21 @@ import (
 
 const MimeType = "application/dns-message"
 
-var _ Transport = (*HTTPSTransport)(nil)
+var _ Upstream = (*HTTPSUpstream)(nil)
 
-type HTTPSTransport struct {
-	name        string
+type HTTPSUpstream struct {
 	destination string
 	transport   *http.Transport
 }
 
 func init() {
-	RegisterTransport([]string{"https"}, func(options TransportOptions) (Transport, error) {
-		return NewHTTPSTransport(options), nil
+	RegisterUpstream([]string{"https"}, func(options UpstreamOptions) (Upstream, error) {
+		return NewHTTPSUpstream(options), nil
 	})
 }
 
-func NewHTTPSTransport(options TransportOptions) *HTTPSTransport {
-	return &HTTPSTransport{
-		name:        options.Name,
+func NewHTTPSUpstream(options UpstreamOptions) *HTTPSUpstream {
+	return &HTTPSUpstream{
 		destination: options.Address,
 		transport: &http.Transport{
 			ForceAttemptHTTP2: true,
@@ -49,29 +47,21 @@ func NewHTTPSTransport(options TransportOptions) *HTTPSTransport {
 	}
 }
 
-func (t *HTTPSTransport) Name() string {
-	return t.name
-}
-
-func (t *HTTPSTransport) Start() error {
+func (t *HTTPSUpstream) Start() error {
 	return nil
 }
 
-func (t *HTTPSTransport) Reset() {
+func (t *HTTPSUpstream) Reset() {
 	t.transport.CloseIdleConnections()
 	t.transport = t.transport.Clone()
 }
 
-func (t *HTTPSTransport) Close() error {
+func (t *HTTPSUpstream) Close() error {
 	t.Reset()
 	return nil
 }
 
-func (t *HTTPSTransport) Raw() bool {
-	return true
-}
-
-func (t *HTTPSTransport) Exchange(ctx context.Context, message *dns.Msg) (*dns.Msg, error) {
+func (t *HTTPSUpstream) Exchange(ctx context.Context, message *dns.Msg) (*dns.Msg, error) {
 	exMessage := *message
 	exMessage.Id = 0
 	exMessage.Compress = true
@@ -119,6 +109,6 @@ func (t *HTTPSTransport) Exchange(ctx context.Context, message *dns.Msg) (*dns.M
 	return &responseMessage, nil
 }
 
-func (t *HTTPSTransport) Lookup(ctx context.Context, domain string, strategy DomainStrategy) ([]netip.Addr, error) {
+func (t *HTTPSUpstream) Lookup(ctx context.Context, domain string, strategy DomainStrategy) ([]netip.Addr, error) {
 	return nil, os.ErrInvalid
 }

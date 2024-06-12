@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/sagernet/quic-go"
-	"github.com/sagernet/sing-dns"
+	dns "github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -22,16 +22,15 @@ import (
 	mDNS "github.com/miekg/dns"
 )
 
-var _ dns.Transport = (*Transport)(nil)
+var _ dns.Upstream = (*Upstream)(nil)
 
 func init() {
-	dns.RegisterTransport([]string{"quic"}, func(options dns.TransportOptions) (dns.Transport, error) {
-		return NewTransport(options)
+	dns.RegisterUpstream([]string{"quic"}, func(options dns.UpstreamOptions) (dns.Upstream, error) {
+		return NewUpstream(options)
 	})
 }
 
-type Transport struct {
-	name       string
+type Upstream struct {
 	ctx        context.Context
 	dialer     N.Dialer
 	serverAddr M.Socksaddr
@@ -40,7 +39,7 @@ type Transport struct {
 	connection quic.EarlyConnection
 }
 
-func NewTransport(options dns.TransportOptions) (*Transport, error) {
+func NewUpstream(options dns.UpstreamOptions) (*Upstream, error) {
 	serverURL, err := url.Parse(options.Address)
 	if err != nil {
 		return nil, err
@@ -52,39 +51,30 @@ func NewTransport(options dns.TransportOptions) (*Transport, error) {
 	if serverAddr.Port == 0 {
 		serverAddr.Port = 853
 	}
-	return &Transport{
-		name:       options.Name,
+	return &Upstream{
 		ctx:        options.Context,
 		dialer:     options.Dialer,
 		serverAddr: serverAddr,
 	}, nil
 }
 
-func (t *Transport) Name() string {
-	return t.name
-}
-
-func (t *Transport) Start() error {
+func (t *Upstream) Start() error {
 	return nil
 }
 
-func (t *Transport) Reset() {
+func (t *Upstream) Reset() {
 	connection := t.connection
 	if connection != nil {
 		connection.CloseWithError(0, "")
 	}
 }
 
-func (t *Transport) Close() error {
+func (t *Upstream) Close() error {
 	t.Reset()
 	return nil
 }
 
-func (t *Transport) Raw() bool {
-	return true
-}
-
-func (t *Transport) openConnection() (quic.EarlyConnection, error) {
+func (t *Upstream) openConnection() (quic.EarlyConnection, error) {
 	connection := t.connection
 	if connection != nil && !common.Done(connection.Context()) {
 		return connection, nil
@@ -113,7 +103,7 @@ func (t *Transport) openConnection() (quic.EarlyConnection, error) {
 	return earlyConnection, nil
 }
 
-func (t *Transport) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, error) {
+func (t *Upstream) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, error) {
 	var (
 		conn     quic.Connection
 		err      error
@@ -137,7 +127,7 @@ func (t *Transport) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg,
 	return nil, err
 }
 
-func (t *Transport) exchange(ctx context.Context, message *mDNS.Msg, conn quic.Connection) (*mDNS.Msg, error) {
+func (t *Upstream) exchange(ctx context.Context, message *mDNS.Msg, conn quic.Connection) (*mDNS.Msg, error) {
 	exMessage := *message
 	exMessage.Id = 0
 	requestLen := exMessage.Len()
@@ -182,7 +172,7 @@ func (t *Transport) exchange(ctx context.Context, message *mDNS.Msg, conn quic.C
 	return &responseMessage, nil
 }
 
-func (t *Transport) Lookup(ctx context.Context, domain string, strategy dns.DomainStrategy) ([]netip.Addr, error) {
+func (t *Upstream) Lookup(ctx context.Context, domain string, strategy dns.DomainStrategy) ([]netip.Addr, error) {
 	return nil, os.ErrInvalid
 }
 
