@@ -120,6 +120,9 @@ func (l *observableLogger) Log(ctx context.Context, level Level, args []any) {
 		if level == LevelPanic {
 			panic(message)
 		}
+		if l.writer == nil {
+			return
+		}
 		l.writer.Write([]byte(message))
 		if level == LevelFatal {
 			os.Exit(1)
