@@ -114,11 +114,18 @@ func (r *Router) Exchange(ctx context.Context, message *mDNS.Msg) (*mDNS.Msg, er
 			return
 		}
 		for _, answer := range response.Answer {
+			domain := rawFqdn
 			switch record := answer.(type) {
 			case *mDNS.A:
-				r.dnsReverseMapping.Save(M.AddrFromIP(record.A), fqdnToDomain(record.Hdr.Name), int(record.Hdr.Ttl))
+				if domain == "" {
+					domain = record.Hdr.Name
+				}
+				r.dnsReverseMapping.Save(M.AddrFromIP(record.A), fqdnToDomain(domain), int(record.Hdr.Ttl))
 			case *mDNS.AAAA:
-				r.dnsReverseMapping.Save(M.AddrFromIP(record.AAAA), fqdnToDomain(record.Hdr.Name), int(record.Hdr.Ttl))
+				if domain == "" {
+					domain = record.Hdr.Name
+				}
+				r.dnsReverseMapping.Save(M.AddrFromIP(record.AAAA), fqdnToDomain(domain), int(record.Hdr.Ttl))
 			}
 		}
 	}()

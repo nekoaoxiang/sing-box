@@ -21,6 +21,7 @@ icon: material/new-box
     "disable_expire": false,
     "independent_cache": false,
     "reverse_mapping": false,
+    "mapping_override": false,
     "client_subnet": "",
     "fakeip": {},
     "hosts": {
@@ -75,6 +76,12 @@ Stores a reverse mapping of IP addresses after responding to a DNS query in orde
 
 Since this process relies on the act of resolving domain names by an application before making a request, it can be
 problematic in environments such as macOS, where DNS is proxied and cached by the system.
+
+#### mapping_override
+
+Override the connection destination address with the domain stored in reverse mapping.
+
+Only action when `reverse_mapping` on.
 
 #### client_subnet
 

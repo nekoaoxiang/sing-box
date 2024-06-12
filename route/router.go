@@ -78,6 +78,7 @@ type Router struct {
 	transportMap                       map[string]dns.Transport
 	transportDomainStrategy            map[dns.Transport]dns.DomainStrategy
 	dnsReverseMapping                  *DNSReverseMapping
+	dnsMappingOverride                 bool
 	fakeIPStore                        adapter.FakeIPStore
 	interfaceFinder                    *control.DefaultInterfaceFinder
 	autoDetectInterface                bool
@@ -352,6 +353,7 @@ func NewRouter(
 
 	if dnsOptions.ReverseMapping {
 		router.dnsReverseMapping = NewDNSReverseMapping()
+		router.dnsMappingOverride = dnsOptions.MappingOverride
 	}
 
 	if fakeIPOptions := dnsOptions.FakeIP; fakeIPOptions != nil && dnsOptions.FakeIP.Enabled {
@@ -874,6 +876,22 @@ func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata ad
 		r.logger.DebugContext(ctx, "connection destination is overridden as ", domain, ":", metadata.Destination.Port)
 	}
 
+	if r.dnsReverseMapping != nil {
+		domain, loaded := r.dnsReverseMapping.Query(metadata.Destination.Addr)
+		if loaded {
+			r.logger.DebugContext(ctx, "found mapped domain: ", metadata.Domain)
+			metadata.Domain = domain
+			if !metadata.Destination.IsFqdn() && r.dnsMappingOverride {
+				metadata.OriginDestination = metadata.Destination
+				metadata.Destination = M.Socksaddr{
+					Fqdn: domain,
+					Port: metadata.Destination.Port,
+				}
+				r.logger.DebugContext(ctx, "connection destination is overridden as ", domain, ":", metadata.Destination.Port)
+			}
+		}
+	}
+
 	if deadline.NeedAdditionalReadDeadline(conn) {
 		conn = deadline.NewConn(conn)
 	}
@@ -912,14 +930,6 @@ func (r *Router) RouteConnection(ctx context.Context, conn net.Conn, metadata ad
 			conn = bufio.NewCachedConn(conn, buffer)
 		} else {
 			buffer.Release()
-		}
-	}
-
-	if r.dnsReverseMapping != nil {
-		domain, loaded := r.dnsReverseMapping.Query(metadata.Destination.Addr)
-		if loaded {
-			metadata.Domain = domain
-			r.logger.DebugContext(ctx, "found reserve mapped domain: ", metadata.Domain)
 		}
 	}
 
@@ -1011,6 +1021,23 @@ func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, m
 		r.logger.DebugContext(ctx, "packet destination is overridden as ", domain, ":", metadata.Destination.Port)
 	}
 
+	if r.dnsReverseMapping != nil {
+		domain, loaded := r.dnsReverseMapping.Query(metadata.Destination.Addr)
+		if loaded {
+			r.logger.DebugContext(ctx, "found mapped domain: ", metadata.Domain)
+			metadata.Domain = domain
+			if !metadata.Destination.IsFqdn() && r.dnsMappingOverride {
+				metadata.OriginDestination = metadata.Destination
+				metadata.Destination = M.Socksaddr{
+					Fqdn: domain,
+					Port: metadata.Destination.Port,
+				}
+				r.logger.DebugContext(ctx, "packet destination is overridden as ", domain, ":", metadata.Destination.Port)
+				destOverride = true
+			}
+		}
+	}
+
 	// Currently we don't have deadline usages for UDP connections
 	/*if deadline.NeedAdditionalReadDeadline(conn) {
 		conn = deadline.NewPacketConn(bufio.NewNetPacketConn(conn))
@@ -1054,13 +1081,6 @@ func (r *Router) RoutePacketConnection(ctx context.Context, conn N.PacketConn, m
 			}
 		}
 		conn = bufio.NewCachedPacketConn(conn, buffer, destination)
-	}
-	if r.dnsReverseMapping != nil {
-		domain, loaded := r.dnsReverseMapping.Query(metadata.Destination.Addr)
-		if loaded {
-			metadata.Domain = domain
-			r.logger.DebugContext(ctx, "found reserve mapped domain: ", metadata.Domain)
-		}
 	}
 	if metadata.Destination.IsFqdn() {
 		metadata.Destination.Fqdn = r.dnsClient.GetExactDomainFromHosts(ctx, metadata.Destination.Fqdn, false)

@@ -21,6 +21,7 @@ icon: material/new-box
     "disable_expire": false,
     "independent_cache": false,
     "reverse_mapping": false,
+    "mapping_override": false,
     "client_subnet": "",
     "fakeip": {},
     "hosts": {
@@ -73,6 +74,12 @@ icon: material/new-box
 在响应 DNS 查询后存储 IP 地址的反向映射以为路由目的提供域名。
 
 由于此过程依赖于应用程序在发出请求之前解析域名的行为，因此在 macOS 等 DNS 由系统代理和缓存的环境中可能会出现问题。
+
+#### mapping_override
+
+使用存储的 IP 地址的反向映射的域名覆盖连接目标地址。
+
+依赖 `reverse_mapping` 开启。
 
 #### client_subnet
 
