@@ -3,9 +3,12 @@ package outbound
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"net"
 	"os"
+	"sync"
 
+	mDNS "github.com/miekg/dns"
 	"github.com/sagernet/sing-box/adapter"
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-dns"
@@ -15,9 +18,6 @@ import (
 	"github.com/sagernet/sing/common/canceler"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/common/task"
-
-	mDNS "github.com/miekg/dns"
 )
 
 var _ adapter.Outbound = (*DNS)(nil)
@@ -97,6 +97,27 @@ func (d *DNS) handleConnection(ctx context.Context, conn net.Conn, metadata adap
 	return nil
 }
 
+type safeWaitGroup struct {
+	used bool
+	wg   sync.WaitGroup
+}
+
+func (g *safeWaitGroup) Add(delta int) {
+	g.used = true
+	g.wg.Add(delta)
+}
+
+func (g *safeWaitGroup) Done() {
+	g.wg.Done()
+}
+
+func (g *safeWaitGroup) Wait() {
+	if !g.used {
+		return
+	}
+	g.wg.Wait()
+}
+
 func (d *DNS) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
 	metadata.Destination = M.Socksaddr{}
 	var reader N.PacketReader = conn
@@ -119,9 +140,15 @@ func (d *DNS) NewPacketConnection(ctx context.Context, conn N.PacketConn, metada
 	}
 	fastClose, cancel := common.ContextWithCancelCause(ctx)
 	timeout := canceler.New(fastClose, cancel, C.DNSTimeout)
-	var group task.Group
-	group.Append0(func(ctx context.Context) error {
+	var wg safeWaitGroup
+	exitChan := make(chan struct{})
+	go func() {
 		for {
+			select {
+			case <-exitChan:
+				return
+			default:
+			}
 			var message mDNS.Msg
 			var destination M.Socksaddr
 			var err error
@@ -135,7 +162,7 @@ func (d *DNS) NewPacketConnection(ctx context.Context, conn N.PacketConn, metada
 				packet.Buffer.Release()
 				if err != nil {
 					cancel(err)
-					return err
+					return
 				}
 				destination = packet.Destination
 			} else {
@@ -144,7 +171,7 @@ func (d *DNS) NewPacketConnection(ctx context.Context, conn N.PacketConn, metada
 				if err != nil {
 					buffer.Release()
 					cancel(err)
-					return err
+					return
 				}
 				for _, counter := range counters {
 					counter(int64(buffer.Len()))
@@ -153,44 +180,67 @@ func (d *DNS) NewPacketConnection(ctx context.Context, conn N.PacketConn, metada
 				buffer.Release()
 				if err != nil {
 					cancel(err)
-					return err
+					break
 				}
 				timeout.Update()
 			}
+			select {
+			case <-exitChan:
+				return
+			default:
+			}
 			metadataInQuery := metadata
-			go func() error {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
 				response, err := d.router.Exchange(adapter.WithContext(ctx, &metadataInQuery), &message)
 				if err != nil {
 					cancel(err)
-					return err
+					return
+				}
+				select {
+				case <-exitChan:
+					return
+				default:
 				}
 				timeout.Update()
 				responseBuffer, err := dns.TruncateDNSMessage(&message, response, 1024)
 				if err != nil {
 					cancel(err)
-					return err
+					return
 				}
 				err = conn.WritePacket(responseBuffer, destination)
 				if err != nil {
 					cancel(err)
 				}
-				return err
+				return
 			}()
 		}
-	})
-	group.Cleanup(func() {
-		conn.Close()
-	})
-	return group.Run(fastClose)
+	}()
+	<-fastClose.Done()
+	exitChan <- struct{}{}
+	wg.Wait()
+	conn.Close()
+	err := fastClose.Err()
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, os.ErrDeadlineExceeded) {
+		return err
+	}
+	return nil
 }
 
 func (d *DNS) newPacketConnection(ctx context.Context, conn N.PacketConn, readWaiter N.PacketReadWaiter, readCounters []N.CountFunc, cached []*N.PacketBuffer, metadata adapter.InboundContext) error {
 	ctx = adapter.WithContext(ctx, &metadata)
 	fastClose, cancel := common.ContextWithCancelCause(ctx)
 	timeout := canceler.New(fastClose, cancel, C.DNSTimeout)
-	var group task.Group
-	group.Append0(func(ctx context.Context) error {
+	exitChan := make(chan struct{})
+	var wg safeWaitGroup
+	go func() {
 		for {
+			select {
+			case <-exitChan:
+				return
+			default:
+			}
 			var (
 				message     mDNS.Msg
 				destination M.Socksaddr
@@ -207,14 +257,14 @@ func (d *DNS) newPacketConnection(ctx context.Context, conn N.PacketConn, readWa
 				packet.Buffer.Release()
 				if err != nil {
 					cancel(err)
-					return err
+					return
 				}
 				destination = packet.Destination
 			} else {
 				buffer, destination, err = readWaiter.WaitReadPacket()
 				if err != nil {
 					cancel(err)
-					return err
+					return
 				}
 				for _, counter := range readCounters {
 					counter(int64(buffer.Len()))
@@ -223,33 +273,49 @@ func (d *DNS) newPacketConnection(ctx context.Context, conn N.PacketConn, readWa
 				buffer.Release()
 				if err != nil {
 					cancel(err)
-					return err
+					return
 				}
 				timeout.Update()
 			}
+			select {
+			case <-exitChan:
+				return
+			default:
+			}
 			metadataInQuery := metadata
-			go func() error {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
 				response, err := d.router.Exchange(adapter.WithContext(ctx, &metadataInQuery), &message)
 				if err != nil {
 					cancel(err)
-					return err
+					return
+				}
+				select {
+				case <-exitChan:
+					return
+				default:
 				}
 				timeout.Update()
 				responseBuffer, err := dns.TruncateDNSMessage(&message, response, 1024)
 				if err != nil {
 					cancel(err)
-					return err
+					return
 				}
 				err = conn.WritePacket(responseBuffer, destination)
 				if err != nil {
 					cancel(err)
 				}
-				return err
+				return
 			}()
 		}
-	})
-	group.Cleanup(func() {
-		conn.Close()
-	})
-	return group.Run(fastClose)
+	}()
+	<-fastClose.Done()
+	wg.Wait()
+	conn.Close()
+	err := fastClose.Err()
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, os.ErrDeadlineExceeded) {
+		return err
+	}
+	return nil
 }
