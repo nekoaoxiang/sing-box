@@ -67,7 +67,7 @@ jobs:
         run: |
           cd sing-box
           make lib_install
-          TAGS="with_quic,with_wireguard,with_ech,with_utls,with_reality_server,with_clash_api,with_gvisor"
+          TAGS="with_quic,with_ech,with_utls,with_reality_server,with_clash_api"
           CGO_ENABLED=1 gomobile bind -v -androidapi 21 -javapkg=io.nekohasekai -libname=box -trimpath -ldflags "-X github.com/sagernet/sing-box/constant.Version=${{ env.VERSION_NAME }} -s -w -buildid=" -tags ${TAGS} ./experimental/libbox
 
       - name: Move aar file and modify some files
