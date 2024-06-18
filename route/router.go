@@ -551,7 +551,7 @@ func (r *Router) Start() error {
 	r.dnsClient.Start()
 	monitor.Finish()
 
-	if r.needPackageManager && r.platformInterface == nil {
+	if r.platformInterface == nil {
 		monitor.Start("initialize package manager")
 		packageManager, err := tun.NewPackageManager(r)
 		monitor.Finish()
