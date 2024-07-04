@@ -108,7 +108,9 @@ icon: material/alert-decagram
         "user_id": [
           1000
         ],
-        "clash_mode": "direct",
+        "clash_mode": [
+          "direct"
+        ],
         "wifi_ssid": [
           "My WIFI"
         ],
