@@ -22,6 +22,14 @@ jobs:
           cache-dependency-path: |
             ./sing-box/go.sum
 
+      - name: revert golang1.23 commit for windows7/8
+        run: |
+          cd $(go env GOROOT)
+          curl https://github.com/MetaCubeX/go/commit/9ac42137ef6730e8b7daca016ece831297a1d75b.diff | patch --verbose -p 1
+          curl https://github.com/MetaCubeX/go/commit/21290de8a4c91408de7c2b5b68757b1e90af49dd.diff | patch --verbose -p 1
+          curl https://github.com/MetaCubeX/go/commit/6a31d3fa8e47ddabc10bd97bff10d9a85f4cfb76.diff | patch --verbose -p 1
+          curl https://github.com/MetaCubeX/go/commit/69e2eed6dd0f6d815ebf15797761c13f31213dd6.diff | patch --verbose -p 1
+
       - name: Get version and code
         run: |
           cd sing-box
@@ -33,7 +41,7 @@ jobs:
         run: |
           cd sing-box
           TAGS="with_quic,with_dhcp,with_wireguard,with_ech,with_utls,with_clash_api,with_gvisor"
-          CGO_ENABLED=1 GOOS="windows" GOARCH="amd64" TAGS=${TAGS} make build
+          CGO_ENABLED=0 GOOS="windows" GOARCH="amd64" TAGS=${TAGS} make build
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
