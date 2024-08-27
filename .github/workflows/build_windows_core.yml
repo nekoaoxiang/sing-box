@@ -49,4 +49,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sing-box-${{ env.VERSION_NAME }}
-          path: ./sing-box/sing-box
+          path: ./sing-box/sing-box.exe
