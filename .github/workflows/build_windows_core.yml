@@ -33,6 +33,8 @@ jobs:
       - name: Get version and code
         run: |
           cd sing-box
+          git remote add sekai https://github.com/SagerNet/sing-box.git
+          git fetch --tags sekai
           VERSION_NAME=$(CGO_ENABLED=0 go run ./cmd/internal/read_tag)
           echo ${VERSION_NAME}
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
