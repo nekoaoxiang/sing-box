@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/sagernet/fswatch"
 	"github.com/sagernet/sing-box/adapter"
@@ -27,6 +28,7 @@ import (
 var _ adapter.RuleSet = (*LocalRuleSet)(nil)
 
 type LocalRuleSet struct {
+	RuleProvider
 	ctx        context.Context
 	logger     logger.Logger
 	tag        string
@@ -37,6 +39,9 @@ type LocalRuleSet struct {
 	watcher    *fswatch.Watcher
 	callbacks  list.List[adapter.RuleSetUpdateCallback]
 	refs       atomic.Int32
+
+	lastUpdated time.Time
+	ruleCount   uint64
 }
 
 func NewLocalRuleSet(ctx context.Context, logger logger.Logger, options option.RuleSet) (*LocalRuleSet, error) {
@@ -82,6 +87,17 @@ func (s *LocalRuleSet) Name() string {
 	return s.tag
 }
 
+func (s *LocalRuleSet) Format() string {
+	return s.fileFormat
+}
+
+func (s *LocalRuleSet) Update() {
+}
+
+func (s *LocalRuleSet) ListUpdatedTime() time.Time {
+	return s.lastUpdated
+}
+
 func (s *LocalRuleSet) String() string {
 	return strings.Join(F.MapToString(s.rules), " ")
 }
@@ -125,17 +141,22 @@ func (s *LocalRuleSet) reloadFile(path string) error {
 	if err != nil {
 		return err
 	}
+	file, _ := os.Open(path)
+	fs, _ := file.Stat()
+	s.lastUpdated = fs.ModTime()
 	return s.reloadRules(plainRuleSet.Rules)
 }
 
 func (s *LocalRuleSet) reloadRules(headlessRules []option.HeadlessRule) error {
 	rules := make([]adapter.HeadlessRule, len(headlessRules))
-	var err error
+	var ruleCount uint64
 	for i, ruleOptions := range headlessRules {
-		rules[i], err = NewHeadlessRule(s.ctx, ruleOptions)
+		rule, err := NewHeadlessRule(s.ctx, ruleOptions)
 		if err != nil {
 			return E.Cause(err, "parse rule_set.rules.[", i, "]")
 		}
+		rules[i] = rule
+		ruleCount += rule.RuleCount()
 	}
 	var metadata adapter.RuleSetMetadata
 	metadata.ContainsProcessRule = HasHeadlessRule(headlessRules, isProcessHeadlessRule)
@@ -143,6 +164,7 @@ func (s *LocalRuleSet) reloadRules(headlessRules []option.HeadlessRule) error {
 	metadata.ContainsIPCIDRRule = HasHeadlessRule(headlessRules, isIPCIDRHeadlessRule)
 	s.access.Lock()
 	s.rules = rules
+	s.ruleCount = ruleCount
 	s.metadata = metadata
 	callbacks := s.callbacks.Array()
 	s.access.Unlock()

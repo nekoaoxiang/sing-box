@@ -37,6 +37,7 @@ import (
 var _ adapter.RuleSet = (*RemoteRuleSet)(nil)
 
 type RemoteRuleSet struct {
+	RuleProvider
 	ctx            context.Context
 	cancel         context.CancelFunc
 	logger         logger.ContextLogger
@@ -65,6 +66,9 @@ func NewRemoteRuleSet(ctx context.Context, logger logger.ContextLogger, options 
 		updateInterval = 24 * time.Hour
 	}
 	return &RemoteRuleSet{
+		RuleProvider: RuleProvider{
+			format: options.Format,
+		},
 		ctx:            ctx,
 		cancel:         cancel,
 		outbound:       service.FromContext[adapter.OutboundManager](ctx),
@@ -73,6 +77,14 @@ func NewRemoteRuleSet(ctx context.Context, logger logger.ContextLogger, options 
 		updateInterval: updateInterval,
 		pauseManager:   service.FromContext[pause.Manager](ctx),
 	}
+}
+
+func (s *RemoteRuleSet) Update() {
+	s.updateOnce()
+}
+
+func (s *RemoteRuleSet) ListUpdatedTime() time.Time {
+	return s.lastUpdated
 }
 
 func (s *RemoteRuleSet) Name() string {
@@ -207,17 +219,21 @@ func (s *RemoteRuleSet) loadBytes(content []byte) error {
 		return err
 	}
 	rules := make([]adapter.HeadlessRule, len(plainRuleSet.Rules))
+	var ruleCount uint64
 	for i, ruleOptions := range plainRuleSet.Rules {
-		rules[i], err = NewHeadlessRule(s.ctx, ruleOptions)
+		rule, err := NewHeadlessRule(s.ctx, ruleOptions)
 		if err != nil {
 			return E.Cause(err, "parse rule_set.rules.[", i, "]")
 		}
+		rules[i] = rule
+		ruleCount += rule.RuleCount()
 	}
 	s.access.Lock()
 	s.metadata.ContainsProcessRule = HasHeadlessRule(plainRuleSet.Rules, isProcessHeadlessRule)
 	s.metadata.ContainsWIFIRule = HasHeadlessRule(plainRuleSet.Rules, isWIFIHeadlessRule)
 	s.metadata.ContainsIPCIDRRule = HasHeadlessRule(plainRuleSet.Rules, isIPCIDRHeadlessRule)
 	s.rules = rules
+	s.ruleCount = ruleCount
 	callbacks := s.callbacks.Array()
 	s.access.Unlock()
 	for _, callback := range callbacks {

@@ -28,6 +28,8 @@ type Router interface {
 	NeedFindProcess() bool
 	AppendTracker(tracker ConnectionTracker)
 	ResetNetwork()
+
+	RuleSets() []RuleSet
 }
 
 type ConnectionTracker interface {
@@ -60,6 +62,15 @@ type RuleSet interface {
 	UnregisterCallback(element *list.Element[RuleSetUpdateCallback])
 	Close() error
 	HeadlessRule
+
+	RuleProvider
+}
+
+type RuleProvider interface {
+	Format() string
+	ListUpdatedTime() time.Time
+	RuleCount() uint64
+	Update()
 }
 
 type RuleSetUpdateCallback func(it RuleSet)

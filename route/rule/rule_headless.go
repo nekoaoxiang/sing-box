@@ -190,6 +190,9 @@ func NewDefaultHeadlessRule(ctx context.Context, options option.DefaultHeadlessR
 		rule.destinationAddressItems = append(rule.destinationAddressItems, item)
 		rule.allItems = append(rule.allItems, item)
 	}
+
+	rule.ruleCount = uint64(len(rule.allItems))
+
 	return rule, nil
 }
 
@@ -221,5 +224,6 @@ func NewLogicalHeadlessRule(ctx context.Context, options option.LogicalHeadlessR
 		}
 		r.rules[i] = rule
 	}
+	r.ruleCount = 1
 	return r, nil
 }
