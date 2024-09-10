@@ -15,6 +15,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/srs"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/atomic"
@@ -52,6 +53,9 @@ type RemoteRuleSet struct {
 	callbackAccess  sync.Mutex
 	callbacks       list.List[adapter.RuleSetUpdateCallback]
 	refs            atomic.Int32
+
+	lastUpdatedTime time.Time
+	ruleCount       uint64
 }
 
 func NewRemoteRuleSet(ctx context.Context, logger logger.ContextLogger, options option.RuleSet) *RemoteRuleSet {
@@ -75,6 +79,18 @@ func NewRemoteRuleSet(ctx context.Context, logger logger.ContextLogger, options 
 
 func (s *RemoteRuleSet) Name() string {
 	return s.options.Tag
+}
+
+func (s *RemoteRuleSet) Format() string {
+	return s.options.Format
+}
+
+func (s *RemoteRuleSet) RuleCount() uint64 {
+	return s.ruleCount
+}
+
+func (s *RemoteRuleSet) ListUpdatedTime() time.Time {
+	return s.lastUpdatedTime
 }
 
 func (s *RemoteRuleSet) String() string {
@@ -251,6 +267,16 @@ func (s *RemoteRuleSet) loopUpdate() {
 			}
 		}
 	}
+}
+
+func (s *RemoteRuleSet) Update(ctx context.Context) error {
+	err := s.fetchOnce(log.ContextWithNewID(ctx), nil)
+	if err != nil {
+		return err
+	} else if s.refs.Load() == 0 {
+		s.rules = nil
+	}
+	return nil
 }
 
 func (s *RemoteRuleSet) fetchOnce(ctx context.Context, startContext *adapter.HTTPStartContext) error {

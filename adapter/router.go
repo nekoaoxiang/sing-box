@@ -6,10 +6,11 @@ import (
 	"net/http"
 	"net/netip"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box/common/geoip"
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-dns"
+	dns "github.com/sagernet/sing-dns"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 	"github.com/sagernet/sing/common/x/list"
@@ -41,6 +42,8 @@ type Router interface {
 	SetTracker(tracker ConnectionTracker)
 
 	ResetNetwork()
+
+	RuleSets() []RuleSet
 }
 
 type ConnectionTracker interface {
@@ -73,6 +76,10 @@ type RuleSet interface {
 	UnregisterCallback(element *list.Element[RuleSetUpdateCallback])
 	Close() error
 	HeadlessRule
+
+	ListUpdatedTime() time.Time
+	Update(ctx context.Context) error
+	Format() string
 }
 
 type RuleSetUpdateCallback func(it RuleSet)
