@@ -7,6 +7,8 @@ import (
 type HeadlessRule interface {
 	Match(metadata *InboundContext) bool
 	String() string
+
+	RuleCount() uint64
 }
 
 type Rule interface {

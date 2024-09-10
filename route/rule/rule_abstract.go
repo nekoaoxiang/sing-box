@@ -10,7 +10,16 @@ import (
 	F "github.com/sagernet/sing/common/format"
 )
 
+type abstractRuleProvider struct {
+	ruleCount uint64
+}
+
+func (r *abstractRuleProvider) RuleCount() uint64 {
+	return r.ruleCount
+}
+
 type abstractDefaultRule struct {
+	abstractRuleProvider
 	items                   []RuleItem
 	sourceAddressItems      []RuleItem
 	sourcePortItems         []RuleItem
@@ -18,7 +27,6 @@ type abstractDefaultRule struct {
 	destinationIPCIDRItems  []RuleItem
 	destinationPortItems    []RuleItem
 	allItems                []RuleItem
-	ruleSetItem             RuleItem
 	invert                  bool
 	action                  adapter.RuleAction
 }
@@ -163,6 +171,7 @@ func (r *abstractDefaultRule) String() string {
 }
 
 type abstractLogicalRule struct {
+	abstractRuleProvider
 	rules  []adapter.HeadlessRule
 	mode   string
 	invert bool

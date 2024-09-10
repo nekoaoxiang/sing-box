@@ -15,6 +15,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/srs"
 	C "github.com/sagernet/sing-box/constant"
+	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/atomic"
@@ -35,6 +36,7 @@ import (
 var _ adapter.RuleSet = (*RemoteRuleSet)(nil)
 
 type RemoteRuleSet struct {
+	RuleProvider
 	ctx             context.Context
 	cancel          context.CancelFunc
 	outboundManager adapter.OutboundManager
@@ -63,6 +65,9 @@ func NewRemoteRuleSet(ctx context.Context, logger logger.ContextLogger, options 
 		updateInterval = 24 * time.Hour
 	}
 	return &RemoteRuleSet{
+		RuleProvider: RuleProvider{
+			format: options.Format,
+		},
 		ctx:             ctx,
 		cancel:          cancel,
 		outboundManager: service.FromContext[adapter.OutboundManager](ctx),
@@ -208,16 +213,20 @@ func (s *RemoteRuleSet) loadBytes(content []byte) error {
 		return err
 	}
 	rules := make([]adapter.HeadlessRule, len(plainRuleSet.Rules))
+	var ruleCount uint64
 	for i, ruleOptions := range plainRuleSet.Rules {
-		rules[i], err = NewHeadlessRule(s.ctx, ruleOptions)
+		rule, err := NewHeadlessRule(s.ctx, ruleOptions)
 		if err != nil {
 			return E.Cause(err, "parse rule_set.rules.[", i, "]")
 		}
+		rules[i] = rule
+		ruleCount += rule.RuleCount()
 	}
 	s.metadata.ContainsProcessRule = hasHeadlessRule(plainRuleSet.Rules, isProcessHeadlessRule)
 	s.metadata.ContainsWIFIRule = hasHeadlessRule(plainRuleSet.Rules, isWIFIHeadlessRule)
 	s.metadata.ContainsIPCIDRRule = hasHeadlessRule(plainRuleSet.Rules, isIPCIDRHeadlessRule)
 	s.rules = rules
+	s.ruleCount = ruleCount
 	s.callbackAccess.Lock()
 	callbacks := s.callbacks.Array()
 	s.callbackAccess.Unlock()
@@ -251,6 +260,16 @@ func (s *RemoteRuleSet) loopUpdate() {
 			}
 		}
 	}
+}
+
+func (s *RemoteRuleSet) Update(ctx context.Context) error {
+	err := s.fetchOnce(log.ContextWithNewID(ctx), nil)
+	if err != nil {
+		return err
+	} else if s.refs.Load() == 0 {
+		s.rules = nil
+	}
+	return nil
 }
 
 func (s *RemoteRuleSet) fetchOnce(ctx context.Context, startContext *adapter.HTTPStartContext) error {
