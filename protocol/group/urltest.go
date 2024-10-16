@@ -32,6 +32,10 @@ var (
 	_ adapter.InterfaceUpdateListener = (*URLTest)(nil)
 )
 
+func (s *URLTest) UpdateGroup(tag string) error {
+	return nil
+}
+
 type URLTest struct {
 	outbound.Adapter
 	ctx                          context.Context

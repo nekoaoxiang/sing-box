@@ -25,6 +25,7 @@ var _ adapter.OutboundGroup = (*Selector)(nil)
 
 type Selector struct {
 	outbound.Adapter
+	myProviderAdapter
 	ctx                          context.Context
 	outboundManager              adapter.OutboundManager
 	logger                       logger.ContextLogger
@@ -38,7 +39,14 @@ type Selector struct {
 
 func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SelectorOutboundOptions) (adapter.Outbound, error) {
 	outbound := &Selector{
-		Adapter:                      outbound.NewAdapter(C.TypeSelector, nil, tag, options.Outbounds),
+		Adapter: outbound.NewAdapter(C.TypeSelector, nil, tag, options.Outbounds),
+		myProviderAdapter: myProviderAdapter{
+			uses:                options.Providers,
+			includeAllProviders: options.IncludeAllProviders,
+			providerManager:     service.FromContext[adapter.ProviderManager](ctx),
+			outboundList:        []adapter.Outbound{},
+			providers:           make(map[string]adapter.Provider),
+		},
 		ctx:                          ctx,
 		outboundManager:              service.FromContext[adapter.OutboundManager](ctx),
 		logger:                       logger,
@@ -48,8 +56,23 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 		interruptGroup:               interrupt.NewGroup(),
 		interruptExternalConnections: options.InterruptExistConnections,
 	}
-	if len(outbound.tags) == 0 {
-		return nil, E.New("missing tags")
+	if len(outbound.tags) == 0 && len(outbound.uses) == 0 && !outbound.includeAllProviders {
+		return nil, E.New("missing tags and uses")
+	}
+
+	if options.Filter.Includes != nil {
+		includes, err := NewProviderFilter(options.Filter.Includes)
+		if err != nil {
+			return nil, err
+		}
+		outbound.includes = includes
+	}
+	if options.Filter.Excludes != nil {
+		excludes, err := NewProviderFilter(options.Filter.Excludes)
+		if err != nil {
+			return nil, err
+		}
+		outbound.excludes = excludes
 	}
 	return outbound, nil
 }
@@ -62,13 +85,13 @@ func (s *Selector) Network() []string {
 }
 
 func (s *Selector) Start() error {
-	for i, tag := range s.tags {
-		detour, loaded := s.outboundManager.Outbound(tag)
-		if !loaded {
-			return E.New("outbound ", i, " not found: ", tag)
-		}
-		s.outbounds[tag] = detour
+	outbounds, outboundList, err := s.pickOutbounds()
+	if err != nil {
+		return err
 	}
+
+	s.outbounds = outbounds
+	s.outboundList = outboundList
 
 	if s.Tag() != "" {
 		cacheFile := service.FromContext[adapter.CacheFile](s.ctx)
@@ -93,7 +116,63 @@ func (s *Selector) Start() error {
 		return nil
 	}
 
-	s.selected = s.outbounds[s.tags[0]]
+	s.selected = outboundList[0]
+	return nil
+}
+
+func (s *Selector) pickOutbounds() (map[string]adapter.Outbound, []adapter.Outbound, error) {
+	outbounds := map[string]adapter.Outbound{}
+	outboundList := []adapter.Outbound{}
+
+	for i, tag := range s.tags {
+		detour, loaded := s.outboundManager.Outbound(tag)
+		if !loaded {
+			return nil, nil, E.New("outbound ", i, " not found: ", tag)
+		}
+		outbounds[tag] = detour
+		outboundList = append(outboundList, detour)
+	}
+
+	if s.includeAllProviders {
+		uses := []string{}
+		for _, provider := range s.providerManager.Providers() {
+			uses = append(uses, provider.Tag())
+		}
+		s.uses = uses
+	}
+	for i, use := range s.uses {
+		provider, loaded := s.providerManager.Provider(use)
+		if !loaded {
+			return nil, nil, E.New("provider ", i, " not found: ", provider)
+		}
+		s.providers[use] = provider
+		for _, outbound := range provider.Outbounds() {
+			if !matchProviderFilter(outbound, s.includes, s.excludes) {
+				continue
+			}
+			tag := outbound.Tag()
+			outbounds[tag] = outbound
+			outboundList = append(outboundList, outbound)
+		}
+	}
+	if len(outbounds) == 0 {
+		direct, _ := s.outboundManager.Outbound("direct")
+		outbounds["direct"] = direct
+		outboundList = append(outboundList, direct)
+		s.selected = direct
+	}
+	return outbounds, outboundList, nil
+}
+
+func (s *Selector) UpdateGroup(tag string) error {
+	if _, ok := s.providers[tag]; ok {
+		outbounds, outboundList, err := s.pickOutbounds()
+		if err != nil {
+			return E.New("update group outbound failed: ", s.Tag())
+		}
+		s.outbounds = outbounds
+		s.outboundList = outboundList
+	}
 	return nil
 }
 
@@ -102,7 +181,11 @@ func (s *Selector) Now() string {
 }
 
 func (s *Selector) All() []string {
-	return s.tags
+	var all []string
+	for _, outbound := range s.outboundList {
+		all = append(all, outbound.Tag())
+	}
+	return all
 }
 
 func (s *Selector) SelectOutbound(tag string) bool {
