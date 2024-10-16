@@ -34,6 +34,7 @@ var (
 
 type URLTest struct {
 	outbound.Adapter
+	myProviderAdapter
 	ctx                          context.Context
 	router                       adapter.Router
 	outboundManager              adapter.OutboundManager
@@ -49,7 +50,12 @@ type URLTest struct {
 
 func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.URLTestOutboundOptions) (adapter.Outbound, error) {
 	outbound := &URLTest{
-		Adapter:                      outbound.NewAdapter(C.TypeURLTest, []string{N.NetworkTCP, N.NetworkUDP}, tag, options.Outbounds),
+		Adapter: outbound.NewAdapter(C.TypeURLTest, []string{N.NetworkTCP, N.NetworkUDP}, tag, options.Outbounds),
+		myProviderAdapter: myProviderAdapter{
+			uses:                options.Providers,
+			includeAllProviders: options.IncludeAllProviders,
+			providerManager:     service.FromContext[adapter.ProviderManager](ctx),
+		},
 		ctx:                          ctx,
 		router:                       router,
 		outboundManager:              service.FromContext[adapter.OutboundManager](ctx),
@@ -61,21 +67,64 @@ func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLo
 		idleTimeout:                  time.Duration(options.IdleTimeout),
 		interruptExternalConnections: options.InterruptExistConnections,
 	}
-	if len(outbound.tags) == 0 {
-		return nil, E.New("missing tags")
+	if len(outbound.tags) == 0 && len(outbound.uses) == 0 && !outbound.includeAllProviders {
+		return nil, E.New("missing tags and uses")
+	}
+	if options.Filter != nil {
+		if options.Filter.Includes != nil {
+			includes, err := NewProviderFilter(options.Filter.Includes)
+			if err != nil {
+				return nil, err
+			}
+			outbound.includes = includes
+		}
+		if options.Filter.Excludes != nil {
+			excludes, err := NewProviderFilter(options.Filter.Excludes)
+			if err != nil {
+				return nil, err
+			}
+			outbound.excludes = excludes
+		}
 	}
 	return outbound, nil
 }
 
-func (s *URLTest) Start() error {
-	outbounds := make([]adapter.Outbound, 0, len(s.tags))
-	for i, tag := range s.tags {
-		detour, loaded := s.outboundManager.Outbound(tag)
-		if !loaded {
-			return E.New("outbound ", i, " not found: ", tag)
+func (s *URLTest) UpdateGroup(tag string) error {
+	for _, use := range s.uses {
+		if tag == use {
+			outboundByTag, tags, err := s.getOutbounds(s.tags, s.outboundManager)
+			if err != nil {
+				return E.New("update group outbound failed: ", s.Tag())
+			}
+			s.tags = tags
+
+			outbounds := []adapter.Outbound{}
+			for _, tag := range tags {
+				detour := outboundByTag[tag]
+				outbounds = append(outbounds, detour)
+			}
+
+			s.group.updateGroup(outbounds)
 		}
+	}
+	return nil
+}
+
+func (s *URLTest) Start() error {
+
+	outboundByTag, tags, err := s.getOutbounds(s.tags, s.outboundManager)
+	if err != nil {
+		return err
+	}
+
+	s.tags = tags
+
+	outbounds := []adapter.Outbound{}
+	for _, tag := range tags {
+		detour := outboundByTag[tag]
 		outbounds = append(outbounds, detour)
 	}
+
 	group, err := NewURLTestGroup(s.ctx, s.outboundManager, s.logger, outbounds, s.link, s.interval, s.tolerance, s.idleTimeout, s.interruptExternalConnections)
 	if err != nil {
 		return err
@@ -239,6 +288,10 @@ func NewURLTestGroup(ctx context.Context, outboundManager adapter.OutboundManage
 		interruptGroup:               interrupt.NewGroup(),
 		interruptExternalConnections: interruptExternalConnections,
 	}, nil
+}
+
+func (s *URLTestGroup) updateGroup(outbounds []adapter.Outbound) {
+	s.outbounds = outbounds
 }
 
 func (g *URLTestGroup) PostStart() {

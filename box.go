@@ -11,6 +11,7 @@ import (
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/adapter/inbound"
 	"github.com/sagernet/sing-box/adapter/outbound"
+	"github.com/sagernet/sing-box/adapter/provider"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/taskmonitor"
 	C "github.com/sagernet/sing-box/constant"
@@ -39,6 +40,7 @@ type Box struct {
 	router     *route.Router
 	inbound    *inbound.Manager
 	outbound   *outbound.Manager
+	provider   *provider.Manager
 	services   []adapter.LifecycleService
 	done       chan struct{}
 }
@@ -53,6 +55,7 @@ func Context(
 	ctx context.Context,
 	inboundRegistry adapter.InboundRegistry,
 	outboundRegistry adapter.OutboundRegistry,
+	providerRegistry adapter.ProviderRegistry,
 ) context.Context {
 	if service.FromContext[option.InboundOptionsRegistry](ctx) == nil ||
 		service.FromContext[adapter.InboundRegistry](ctx) == nil {
@@ -63,6 +66,11 @@ func Context(
 		service.FromContext[adapter.OutboundRegistry](ctx) == nil {
 		ctx = service.ContextWith[option.OutboundOptionsRegistry](ctx, outboundRegistry)
 		ctx = service.ContextWith[adapter.OutboundRegistry](ctx, outboundRegistry)
+	}
+	if service.FromContext[option.ProviderOptionsRegistry](ctx) == nil ||
+		service.FromContext[adapter.ProviderRegistry](ctx) == nil {
+		ctx = service.ContextWith[option.ProviderOptionsRegistry](ctx, providerRegistry)
+		ctx = service.ContextWith[adapter.ProviderRegistry](ctx, providerRegistry)
 	}
 	return ctx
 }
@@ -83,6 +91,11 @@ func New(options Options) (*Box, error) {
 	outboundRegistry := service.FromContext[adapter.OutboundRegistry](ctx)
 	if outboundRegistry == nil {
 		return nil, E.New("missing outbound registry in context")
+	}
+
+	providerRegistry := service.FromContext[adapter.ProviderRegistry](ctx)
+	if providerRegistry == nil {
+		return nil, E.New("missing provider registry in context")
 	}
 
 	ctx = pause.WithDefaultManager(ctx)
@@ -120,8 +133,10 @@ func New(options Options) (*Box, error) {
 	routeOptions := common.PtrValueOrDefault(options.Route)
 	inboundManager := inbound.NewManager(logFactory.NewLogger("inbound"), inboundRegistry)
 	outboundManager := outbound.NewManager(logFactory.NewLogger("outbound"), outboundRegistry, routeOptions.Final)
+	providerManager := provider.NewManager(logFactory.NewLogger("provider"), providerRegistry)
 	service.MustRegister[adapter.InboundManager](ctx, inboundManager)
 	service.MustRegister[adapter.OutboundManager](ctx, outboundManager)
+	service.MustRegister[adapter.ProviderManager](ctx, providerManager)
 
 	networkManager, err := route.NewNetworkManager(ctx, logFactory.NewLogger("network"), routeOptions)
 	if err != nil {
@@ -196,6 +211,25 @@ func New(options Options) (*Box, error) {
 			return nil, E.Cause(err, "initialize outbound[", i, "]")
 		}
 	}
+	outboundManager.AddProviderManager(providerManager)
+	for i, providerOptions := range options.Providers {
+		var tag string
+		if providerOptions.Tag != "" {
+			tag = providerOptions.Tag
+		} else {
+			tag = F.ToString(i)
+		}
+		err = providerManager.Create(ctx,
+			router,
+			logFactory.NewLogger(F.ToString("provider/", providerOptions.Type, "[", tag, "]")),
+			tag,
+			providerOptions.Type,
+			providerOptions.Options,
+		)
+		if err != nil {
+			return nil, E.Cause(err, "initialize provider[", i, "]")
+		}
+	}
 	outboundManager.Initialize(common.Must1(
 		direct.NewOutbound(
 			ctx,
@@ -261,6 +295,7 @@ func New(options Options) (*Box, error) {
 		router:     router,
 		inbound:    inboundManager,
 		outbound:   outboundManager,
+		provider:   providerManager,
 		createdAt:  createdAt,
 		logFactory: logFactory,
 		logger:     logFactory.Logger(),
@@ -319,11 +354,11 @@ func (s *Box) preStart() error {
 	if err != nil {
 		return err
 	}
-	err = adapter.Start(adapter.StartStateInitialize, s.network, s.router, s.outbound, s.inbound)
+	err = adapter.Start(adapter.StartStateInitialize, s.network, s.router, s.provider, s.outbound, s.inbound)
 	if err != nil {
 		return err
 	}
-	err = adapter.Start(adapter.StartStateStart, s.outbound, s.network, s.router)
+	err = adapter.Start(adapter.StartStateStart, s.provider, s.outbound, s.network, s.router)
 	if err != nil {
 		return err
 	}
@@ -343,7 +378,7 @@ func (s *Box) start() error {
 	if err != nil {
 		return err
 	}
-	err = adapter.Start(adapter.StartStatePostStart, s.outbound, s.network, s.router, s.inbound)
+	err = adapter.Start(adapter.StartStatePostStart, s.outbound, s.provider, s.network, s.router, s.inbound)
 	if err != nil {
 		return err
 	}
@@ -351,7 +386,7 @@ func (s *Box) start() error {
 	if err != nil {
 		return err
 	}
-	err = adapter.Start(adapter.StartStateStarted, s.network, s.router, s.outbound, s.inbound)
+	err = adapter.Start(adapter.StartStateStarted, s.network, s.router, s.outbound, s.provider, s.inbound)
 	if err != nil {
 		return err
 	}
@@ -370,7 +405,7 @@ func (s *Box) Close() error {
 		close(s.done)
 	}
 	err := common.Close(
-		s.inbound, s.outbound, s.router, s.network,
+		s.inbound, s.outbound, s.provider, s.router, s.network,
 	)
 	for _, lifecycleService := range s.services {
 		err = E.Append(err, lifecycleService.Close(), func(err error) error {
