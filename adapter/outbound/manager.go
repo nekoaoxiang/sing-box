@@ -30,6 +30,8 @@ type Manager struct {
 	dependByTag             map[string][]string
 	defaultOutbound         adapter.Outbound
 	defaultOutboundFallback adapter.Outbound
+
+	providerManager adapter.ProviderManager
 }
 
 func NewManager(logger logger.ContextLogger, registry adapter.OutboundRegistry, defaultTag string) *Manager {
@@ -40,6 +42,10 @@ func NewManager(logger logger.ContextLogger, registry adapter.OutboundRegistry, 
 		outboundByTag: make(map[string]adapter.Outbound),
 		dependByTag:   make(map[string][]string),
 	}
+}
+
+func (m *Manager) AddProviderManager(providerManager adapter.ProviderManager) {
+	m.providerManager = providerManager
 }
 
 func (m *Manager) Initialize(defaultOutboundFallback adapter.Outbound) {
@@ -162,6 +168,15 @@ func (m *Manager) Outbound(tag string) (adapter.Outbound, bool) {
 	m.access.Lock()
 	defer m.access.Unlock()
 	outbound, found := m.outboundByTag[tag]
+	if found {
+		return outbound, found
+	}
+	for _, provider := range m.providerManager.Providers() {
+		outbound, found = provider.OutboundManager().Outbound(tag)
+		if found {
+			break
+		}
+	}
 	return outbound, found
 }
 

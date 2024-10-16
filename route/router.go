@@ -40,6 +40,7 @@ type Router struct {
 	dnsLogger               log.ContextLogger
 	inboundManager          adapter.InboundManager
 	outboundManager         adapter.OutboundManager
+	providerManager         adapter.ProviderManager
 	networkManager          adapter.NetworkManager
 	rules                   []adapter.Rule
 	needGeoIPDatabase       bool
@@ -76,6 +77,7 @@ func NewRouter(ctx context.Context, logFactory log.Factory, options option.Route
 		dnsLogger:             logFactory.NewLogger("dns"),
 		inboundManager:        service.FromContext[adapter.InboundManager](ctx),
 		outboundManager:       service.FromContext[adapter.OutboundManager](ctx),
+		providerManager:       service.FromContext[adapter.ProviderManager](ctx),
 		networkManager:        service.FromContext[adapter.NetworkManager](ctx),
 		rules:                 make([]adapter.Rule, 0, len(options.Rules)),
 		dnsRules:              make([]adapter.DNSRule, 0, len(dnsOptions.Rules)),

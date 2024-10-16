@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/sagernet/sing-box/common/urltest"
-	"github.com/sagernet/sing-dns"
+	dns "github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common/varbin"
 )
 
@@ -98,6 +98,7 @@ type OutboundGroup interface {
 	Outbound
 	Now() string
 	All() []string
+	UpdateGroup(tag string) error
 }
 
 type URLTestGroup interface {
