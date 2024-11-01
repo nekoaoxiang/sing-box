@@ -33,13 +33,15 @@ type Manager struct {
 	dependByTag             map[string][]string
 	defaultOutbound         adapter.Outbound
 	defaultOutboundFallback func() (adapter.Outbound, error)
+	provider                adapter.ProviderManager
 }
 
-func NewManager(logger logger.ContextLogger, registry adapter.OutboundRegistry, endpoint adapter.EndpointManager, defaultTag string) *Manager {
+func NewManager(logger logger.ContextLogger, registry adapter.OutboundRegistry, endpoint adapter.EndpointManager, provider adapter.ProviderManager, defaultTag string) *Manager {
 	return &Manager{
 		logger:        logger,
 		registry:      registry,
 		endpoint:      endpoint,
+		provider:      provider,
 		defaultTag:    defaultTag,
 		outboundByTag: make(map[string]adapter.Outbound),
 		dependByTag:   make(map[string][]string),
@@ -211,7 +213,19 @@ func (m *Manager) Outbound(tag string) (adapter.Outbound, bool) {
 	if found {
 		return outbound, true
 	}
-	return m.endpoint.Get(tag)
+	outbound, found = m.endpoint.Get(tag)
+	if found {
+		return outbound, true
+	}
+	for _, provider := range m.provider.Providers() {
+		if manager := provider.Outbound(); manager != nil {
+			outbound, found = manager.Outbound(tag)
+			if found {
+				return outbound, true
+			}
+		}
+	}
+	return nil, false
 }
 
 func (m *Manager) Default() adapter.Outbound {

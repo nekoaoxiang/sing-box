@@ -95,7 +95,10 @@ func (m *Manager) Get(tag string) (adapter.Endpoint, bool) {
 	m.access.Lock()
 	defer m.access.Unlock()
 	endpoint, found := m.endpointByTag[tag]
-	return endpoint, found
+	if found {
+		return endpoint, true
+	}
+	return nil, false
 }
 
 func (m *Manager) Remove(tag string) error {

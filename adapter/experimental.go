@@ -111,6 +111,7 @@ type OutboundGroup interface {
 	Outbound
 	Now() string
 	All() []string
+	UpdateGroup() error
 }
 
 type URLTestGroup interface {

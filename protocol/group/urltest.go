@@ -32,13 +32,13 @@ func RegisterURLTest(registry *outbound.Registry) {
 var _ adapter.OutboundGroup = (*URLTest)(nil)
 
 type URLTest struct {
+	myGroupAdapter
 	outbound.Adapter
 	ctx                          context.Context
 	router                       adapter.Router
 	outbound                     adapter.OutboundManager
 	connection                   adapter.ConnectionManager
 	logger                       log.ContextLogger
-	tags                         []string
 	link                         string
 	interval                     time.Duration
 	tolerance                    uint16
@@ -49,32 +49,72 @@ type URLTest struct {
 
 func NewURLTest(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.URLTestOutboundOptions) (adapter.Outbound, error) {
 	outbound := &URLTest{
+		myGroupAdapter: myGroupAdapter{
+			uses:                options.Providers,
+			includeAllProviders: options.IncludeAllProviders,
+			providerManager:     service.FromContext[adapter.ProviderManager](ctx),
+			outbound:            service.FromContext[adapter.OutboundManager](ctx),
+			defaultTags:         options.Outbounds,
+		},
 		Adapter:                      outbound.NewAdapter(C.TypeURLTest, tag, []string{N.NetworkTCP, N.NetworkUDP}, options.Outbounds),
 		ctx:                          ctx,
 		router:                       router,
-		outbound:                     service.FromContext[adapter.OutboundManager](ctx),
 		connection:                   service.FromContext[adapter.ConnectionManager](ctx),
 		logger:                       logger,
-		tags:                         options.Outbounds,
 		link:                         options.URL,
 		interval:                     time.Duration(options.Interval),
 		tolerance:                    options.Tolerance,
 		idleTimeout:                  time.Duration(options.IdleTimeout),
 		interruptExternalConnections: options.InterruptExistConnections,
 	}
-	if len(outbound.tags) == 0 {
-		return nil, E.New("missing tags")
+	if len(outbound.defaultTags) == 0 && len(outbound.uses) == 0 && !outbound.includeAllProviders {
+		return nil, E.New("missing tags and uses")
+	}
+	if options.Filter != nil {
+		if options.Filter.Includes != nil {
+			includes, err := NewProviderFilter(options.Filter.Includes)
+			if err != nil {
+				return nil, err
+			}
+			outbound.includes = includes
+		}
+		if options.Filter.Excludes != nil {
+			excludes, err := NewProviderFilter(options.Filter.Excludes)
+			if err != nil {
+				return nil, err
+			}
+			outbound.excludes = excludes
+		}
 	}
 	return outbound, nil
 }
 
+func (s *URLTest) UpdateGroup() error {
+	err := s.getOutbounds()
+	if err != nil {
+		return E.New("update group outbound failed: ", s.Tag())
+	}
+
+	outbounds := []adapter.Outbound{}
+	for _, tag := range s.tags {
+		detour := s.outbounds[tag]
+		outbounds = append(outbounds, detour)
+	}
+
+	s.group.updateGroup(outbounds)
+
+	return nil
+}
+
 func (s *URLTest) Start() error {
-	outbounds := make([]adapter.Outbound, 0, len(s.tags))
-	for i, tag := range s.tags {
-		detour, loaded := s.outbound.Outbound(tag)
-		if !loaded {
-			return E.New("outbound ", i, " not found: ", tag)
-		}
+	err := s.getOutbounds()
+	if err != nil {
+		return err
+	}
+
+	outbounds := []adapter.Outbound{}
+	for _, tag := range s.tags {
+		detour := s.outbounds[tag]
 		outbounds = append(outbounds, detour)
 	}
 	group, err := NewURLTestGroup(s.ctx, s.outbound, s.logger, outbounds, s.link, s.interval, s.tolerance, s.idleTimeout, s.interruptExternalConnections)
@@ -249,6 +289,10 @@ func NewURLTestGroup(ctx context.Context, outboundManager adapter.OutboundManage
 	}, nil
 }
 
+func (s *URLTestGroup) updateGroup(outbounds []adapter.Outbound) {
+	s.outbounds = outbounds
+}
+
 func (g *URLTestGroup) PostStart() {
 	g.access.Lock()
 	defer g.access.Unlock()
@@ -380,14 +424,14 @@ func (g *URLTestGroup) urlTest(ctx context.Context, force bool) (map[string]uint
 			continue
 		}
 		checked[realTag] = true
-		p, loaded := g.outbound.Outbound(realTag)
-		if !loaded {
-			continue
-		}
+		// p, loaded := g.outbound.Outbound(realTag)
+		// if !loaded {
+		// 	continue
+		// }
 		b.Go(realTag, func() (any, error) {
 			testCtx, cancel := context.WithTimeout(g.ctx, C.TCPTimeout)
 			defer cancel()
-			t, err := urltest.URLTest(testCtx, g.link, p)
+			t, err := urltest.URLTest(testCtx, g.link, detour)
 			if err != nil {
 				g.logger.Debug("outbound ", tag, " unavailable: ", err)
 				g.history.DeleteURLTestHistory(realTag)

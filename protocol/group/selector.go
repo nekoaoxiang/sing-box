@@ -31,14 +31,12 @@ var (
 )
 
 type Selector struct {
+	myGroupAdapter
 	outbound.Adapter
 	ctx                          context.Context
-	outbound                     adapter.OutboundManager
 	connection                   adapter.ConnectionManager
 	logger                       logger.ContextLogger
-	tags                         []string
 	defaultTag                   string
-	outbounds                    map[string]adapter.Outbound
 	selected                     common.TypedValue[adapter.Outbound]
 	interruptGroup               *interrupt.Group
 	interruptExternalConnections bool
@@ -46,19 +44,41 @@ type Selector struct {
 
 func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.SelectorOutboundOptions) (adapter.Outbound, error) {
 	outbound := &Selector{
+		myGroupAdapter: myGroupAdapter{
+			defaultTags:         options.Outbounds,
+			outbound:            service.FromContext[adapter.OutboundManager](ctx),
+			outbounds:           make(map[string]adapter.Outbound),
+			uses:                options.Providers,
+			includeAllProviders: options.IncludeAllProviders,
+			providerManager:     service.FromContext[adapter.ProviderManager](ctx),
+		},
 		Adapter:                      outbound.NewAdapter(C.TypeSelector, tag, nil, options.Outbounds),
 		ctx:                          ctx,
-		outbound:                     service.FromContext[adapter.OutboundManager](ctx),
 		connection:                   service.FromContext[adapter.ConnectionManager](ctx),
 		logger:                       logger,
-		tags:                         options.Outbounds,
 		defaultTag:                   options.Default,
-		outbounds:                    make(map[string]adapter.Outbound),
 		interruptGroup:               interrupt.NewGroup(),
 		interruptExternalConnections: options.InterruptExistConnections,
 	}
-	if len(outbound.tags) == 0 {
-		return nil, E.New("missing tags")
+	if len(outbound.defaultTags) == 0 && len(outbound.uses) == 0 && !outbound.includeAllProviders {
+		return nil, E.New("missing tags and uses")
+	}
+
+	if options.Filter != nil {
+		if options.Filter.Includes != nil {
+			includes, err := NewProviderFilter(options.Filter.Includes)
+			if err != nil {
+				return nil, err
+			}
+			outbound.includes = includes
+		}
+		if options.Filter.Excludes != nil {
+			excludes, err := NewProviderFilter(options.Filter.Excludes)
+			if err != nil {
+				return nil, err
+			}
+			outbound.excludes = excludes
+		}
 	}
 	return outbound, nil
 }
@@ -72,12 +92,9 @@ func (s *Selector) Network() []string {
 }
 
 func (s *Selector) Start() error {
-	for i, tag := range s.tags {
-		detour, loaded := s.outbound.Outbound(tag)
-		if !loaded {
-			return E.New("outbound ", i, " not found: ", tag)
-		}
-		s.outbounds[tag] = detour
+	err := s.getOutbounds()
+	if err != nil {
+		return err
 	}
 
 	if s.Tag() != "" {
@@ -104,6 +121,18 @@ func (s *Selector) Start() error {
 	}
 
 	s.selected.Store(s.outbounds[s.tags[0]])
+	return nil
+}
+
+func (s *Selector) UpdateGroup() error {
+	err := s.getOutbounds()
+	if err != nil {
+		return err
+	}
+	_, loaded := s.outbounds[s.selected.Load().Tag()]
+	if !loaded {
+		s.selected.Store(s.outbounds[s.tags[0]])
+	}
 	return nil
 }
 
