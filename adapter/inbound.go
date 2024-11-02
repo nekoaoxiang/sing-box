@@ -74,6 +74,7 @@ type InboundContext struct {
 	FallbackDelay             time.Duration
 
 	DNSServer string
+	DNSMode   string
 
 	DestinationAddresses []netip.Addr
 	SourceGeoIPCode      string

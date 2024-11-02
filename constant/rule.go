@@ -39,3 +39,7 @@ const (
 	RuleActionRejectMethodDefault = "default"
 	RuleActionRejectMethodDrop    = "drop"
 )
+
+const (
+	DNSModeFakeIP = "fake-ip"
+)

@@ -64,6 +64,12 @@ func (t TrackerMetadata) MarshalJSON() ([]byte, error) {
 	} else {
 		rule = "final"
 	}
+	var dnsmode string
+	if t.Metadata.DNSMode != "" {
+		dnsmode = t.Metadata.DNSMode
+	} else {
+		dnsmode = "normal"
+	}
 	return json.Marshal(map[string]any{
 		"id": t.ID,
 		"metadata": map[string]any{
@@ -74,7 +80,7 @@ func (t TrackerMetadata) MarshalJSON() ([]byte, error) {
 			"sourcePort":      F.ToString(t.Metadata.Source.Port),
 			"destinationPort": F.ToString(t.Metadata.Destination.Port),
 			"host":            domain,
-			"dnsMode":         "normal",
+			"dnsMode":         dnsmode,
 			"processPath":     processPath,
 		},
 		"upload":      t.Upload.Load(),

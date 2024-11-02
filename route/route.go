@@ -18,9 +18,9 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/route/rule"
-	"github.com/sagernet/sing-dns"
-	"github.com/sagernet/sing-mux"
-	"github.com/sagernet/sing-vmess"
+	dns "github.com/sagernet/sing-dns"
+	mux "github.com/sagernet/sing-mux"
+	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -352,6 +352,7 @@ func (r *Router) matchRule(
 			Port: metadata.Destination.Port,
 		}
 		metadata.FakeIP = true
+		metadata.DNSMode = C.DNSModeFakeIP
 		r.logger.DebugContext(ctx, "found fakeip domain: ", domain)
 	}
 	if r.dnsReverseMapping != nil && metadata.Domain == "" {
