@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ import (
 	"github.com/sagernet/sing/common/ntp"
 	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
+	"github.com/sagernet/sing/service/filemanager"
 	"github.com/sagernet/sing/service/pause"
 
 	"go4.org/netipx"
@@ -81,6 +83,20 @@ func (s *RemoteRuleSet) String() string {
 	return strings.Join(F.MapToString(s.rules), " ")
 }
 
+func (s *RemoteRuleSet) getPath() string {
+	if s.options.Path == "" {
+		path := s.options.Tag
+		switch s.options.Format {
+		case C.RuleSetFormatSource, "":
+			path += ".json"
+		case C.RuleSetFormatBinary:
+			path += ".srs"
+		}
+		return filemanager.BasePath(s.ctx, path)
+	}
+	return filemanager.BasePath(s.ctx, s.options.Path)
+}
+
 func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext *adapter.HTTPStartContext) error {
 	s.cacheFile = service.FromContext[adapter.CacheFile](s.ctx)
 	var dialer N.Dialer
@@ -96,7 +112,15 @@ func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext *adapter.
 	s.dialer = dialer
 	if s.cacheFile != nil {
 		if savedSet := s.cacheFile.LoadRuleSet(s.options.Tag); savedSet != nil {
-			err := s.loadBytes(savedSet.Content)
+			file, err := filemanager.OpenFile(s.ctx, s.getPath(), 0, 0644)
+			if err != nil {
+				return err
+			}
+			content, err := io.ReadAll(file)
+			if err != nil {
+				return err
+			}
+			err = s.loadBytes(content)
 			if err != nil {
 				return E.Cause(err, "restore cached rule-set")
 			}
@@ -299,9 +323,17 @@ func (s *RemoteRuleSet) fetch(ctx context.Context, startContext *adapter.HTTPSta
 	}
 	s.lastUpdated = time.Now()
 	if s.cacheFile != nil {
+		path := s.getPath()
+		err = filemanager.MkdirAll(s.ctx, filepath.Dir(path), 0755)
+		if err != nil {
+			return err
+		}
+		err = filemanager.WriteFile(s.ctx, path, content, 0644)
+		if err != nil {
+			return err
+		}
 		err = s.cacheFile.SaveRuleSet(s.options.Tag, &adapter.SavedBinary{
 			LastUpdated: s.lastUpdated,
-			Content:     content,
 			LastEtag:    s.lastEtag,
 		})
 		if err != nil {

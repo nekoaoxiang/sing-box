@@ -55,7 +55,7 @@ func NewLocalRuleSet(ctx context.Context, logger logger.Logger, options option.R
 			return nil, err
 		}
 	} else {
-		filePath := filemanager.BasePath(ctx, options.LocalOptions.Path)
+		filePath := filemanager.BasePath(ctx, options.Path)
 		filePath, _ = filepath.Abs(filePath)
 		err := ruleSet.reloadFile(filePath)
 		if err != nil {
