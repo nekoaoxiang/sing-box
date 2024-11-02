@@ -19,8 +19,8 @@ type _RuleSet struct {
 	Type          string        `json:"type,omitempty"`
 	Tag           string        `json:"tag"`
 	Format        string        `json:"format,omitempty"`
+	Path          string        `json:"path,omitempty"`
 	InlineOptions PlainRuleSet  `json:"-"`
-	LocalOptions  LocalRuleSet  `json:"-"`
 	RemoteOptions RemoteRuleSet `json:"-"`
 }
 
@@ -33,7 +33,7 @@ func (r RuleSet) MarshalJSON() ([]byte, error) {
 		r.Type = ""
 		v = r.InlineOptions
 	case C.RuleSetTypeLocal:
-		v = r.LocalOptions
+		v = nil
 	case C.RuleSetTypeRemote:
 		v = r.RemoteOptions
 	default:
@@ -56,7 +56,7 @@ func (r *RuleSet) UnmarshalJSON(bytes []byte) error {
 		r.Type = C.RuleSetTypeInline
 		v = &r.InlineOptions
 	case C.RuleSetTypeLocal:
-		v = &r.LocalOptions
+		v = nil
 	case C.RuleSetTypeRemote:
 		v = &r.RemoteOptions
 	default:
@@ -78,10 +78,6 @@ func (r *RuleSet) UnmarshalJSON(bytes []byte) error {
 		return err
 	}
 	return nil
-}
-
-type LocalRuleSet struct {
-	Path string `json:"path,omitempty"`
 }
 
 type RemoteRuleSet struct {

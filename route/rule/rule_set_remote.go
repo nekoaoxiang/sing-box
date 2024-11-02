@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"github.com/sagernet/sing/common/rw"
 	"github.com/sagernet/sing/common/x/list"
 	"github.com/sagernet/sing/service"
 	"github.com/sagernet/sing/service/pause"
@@ -79,6 +81,22 @@ func (s *RemoteRuleSet) String() string {
 	return strings.Join(F.MapToString(s.rules), " ")
 }
 
+func (s *RemoteRuleSet) getPath(path string) (string, error) {
+	if path == "" {
+		path := s.options.Tag
+		switch s.options.Format {
+		case C.RuleSetFormatSource, "":
+			path += ".json"
+		case C.RuleSetFormatBinary:
+			path += ".srs"
+		}
+	}
+	if rw.IsDir(path) {
+		return "", E.New("rule-set path is a directory: ", path)
+	}
+	return path, nil
+}
+
 func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext *adapter.HTTPStartContext) error {
 	s.cacheFile = service.FromContext[adapter.CacheFile](s.ctx)
 	var dialer N.Dialer
@@ -94,10 +112,23 @@ func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext *adapter.
 	s.dialer = dialer
 	if s.cacheFile != nil {
 		if savedSet := s.cacheFile.LoadRuleSet(s.options.Tag); savedSet != nil {
-			err := s.loadBytes(savedSet.Content)
+			path, err := s.getPath(s.options.Path)
+			if err != nil {
+				return err
+			}
+			file, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			content, err := io.ReadAll(file)
+			if err != nil {
+				return err
+			}
+			err = s.loadBytes(content)
 			if err != nil {
 				return E.Cause(err, "restore cached rule-set")
 			}
+
 			s.lastUpdated = savedSet.LastUpdated
 			s.lastEtag = savedSet.LastEtag
 		}
@@ -285,10 +316,15 @@ func (s *RemoteRuleSet) fetchOnce(ctx context.Context, startContext *adapter.HTT
 		s.lastEtag = eTagHeader
 	}
 	s.lastUpdated = time.Now()
+
+	err = os.WriteFile(s.options.Path, content, 0o666)
+	if err != nil {
+		s.logger.Error("save rule-set file: ", err)
+	}
+
 	if s.cacheFile != nil {
 		err = s.cacheFile.SaveRuleSet(s.options.Tag, &adapter.SavedRuleSet{
 			LastUpdated: s.lastUpdated,
-			Content:     content,
 			LastEtag:    s.lastEtag,
 		})
 		if err != nil {

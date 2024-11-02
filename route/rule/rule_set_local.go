@@ -52,13 +52,13 @@ func NewLocalRuleSet(ctx context.Context, logger logger.Logger, options option.R
 			return nil, err
 		}
 	} else {
-		err := ruleSet.reloadFile(filemanager.BasePath(ctx, options.LocalOptions.Path))
+		err := ruleSet.reloadFile(filemanager.BasePath(ctx, options.Path))
 		if err != nil {
 			return nil, err
 		}
 	}
 	if options.Type == C.RuleSetTypeLocal {
-		filePath, _ := filepath.Abs(options.LocalOptions.Path)
+		filePath, _ := filepath.Abs(options.Path)
 		watcher, err := fswatch.NewWatcher(fswatch.Options{
 			Path: []string{filePath},
 			Callback: func(path string) {
