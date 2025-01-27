@@ -8,6 +8,6 @@
         <intent
             android:action="android.intent.action.MAIN"
             android:targetClass="io.nekohasekai.sfa.ui.ShortcutActivity"
-            android:targetPackage="io.nekohasekai.sfa" />
+            android:targetPackage="com.github.aoxiang.dsb" />
     </shortcut>
 </shortcuts>

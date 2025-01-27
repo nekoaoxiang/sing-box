@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name" translatable="false">sing-box</string>
+    <string name="app_name" translatable="false">DSB</string>
 
     <string name="stop">Stop</string>
     <string name="ok">OK</string>
