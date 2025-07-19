@@ -1,57 +1,72 @@
 package provider
 
 import (
-	"fmt"
-
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing/common/json/badoption"
 )
 
-func newTLSOptions(proxy map[string]any) *option.OutboundTLSOptions {
-	options := &option.OutboundTLSOptions{
-		ECH:     &option.OutboundECHOptions{},
-		UTLS:    &option.OutboundUTLSOptions{},
-		Reality: &option.OutboundRealityOptions{},
+type TLSOption struct {
+	TLS               bool            `yaml:"tls,omitempty"`
+	SNI               string          `yaml:"sni,omitempty"`
+	ServerName        string          `yaml:"servername,omitempty"`
+	Fingerprint       string          `yaml:"fingerprint,omitempty"`
+	ALPN              []string        `yaml:"alpn,omitempty"`
+	SkipCertVerify    bool            `yaml:"skip-cert-verify,omitempty"`
+	ClientFingerprint string          `yaml:"client-fingerprint,omitempty"`
+	RealityOpts       *RealityOptions `yaml:"reality-opts,omitempty"`
+	ECHOpts           *ECHOptions     `yaml:"ech-opts,omitempty"`
+}
+
+type RealityOptions struct {
+	PublicKey string `yaml:"public-key,omitempty"`
+	ShortID   string `yaml:"short-id,omitempty"`
+}
+
+type ECHOptions struct {
+	Enabled bool   `yaml:"enable,omitempty"`
+	Config  string `yaml:"config,omitempty"`
+}
+
+func newTLSOptions(proxy *TLSOption) *option.OutboundTLSOptions {
+	if proxy == nil {
+		return nil
 	}
-	if tls, exists := proxy["tls"].(bool); exists {
-		options.Enabled = tls
+
+	var options option.OutboundTLSOptions
+
+	options.ServerName = proxy.ServerName
+	if options.ServerName == "" {
+		options.ServerName = proxy.SNI
 	}
-	if disableSNI, exists := proxy["disable-sni"].(bool); exists {
-		options.DisableSNI = disableSNI
+
+	options.Enabled = proxy.TLS || proxy.SkipCertVerify || options.ServerName != "" || proxy.RealityOpts != nil
+
+	options.Insecure = proxy.SkipCertVerify
+
+	if len(proxy.ALPN) > 0 {
+		options.ALPN = append(options.ALPN, proxy.ALPN...)
 	}
-	if sni, exists := proxy["sni"].(string); exists {
-		options.ServerName = sni
-	}
-	if peer, exists := proxy["peer"].(string); exists {
-		options.ServerName = peer
-	}
-	if servername, exists := proxy["servername"].(string); exists {
-		options.ServerName = servername
-	}
-	if insecure, exists := proxy["skip-cert-verify"].(bool); exists {
-		options.Enabled = true
-		options.Insecure = insecure
-	}
-	if alpn, exists := proxy["alpn"].([]any); exists {
-		alpnArr := []string{}
-		for _, item := range alpn {
-			alpnArr = append(alpnArr, fmt.Sprint(item))
+
+	if proxy.ECHOpts != nil {
+		options.ECH = &option.OutboundECHOptions{
+			Enabled: proxy.ECHOpts.Enabled,
+			Config:  badoption.Listable[string](append([]string{}, proxy.ECHOpts.Config)),
 		}
-		options.ALPN = alpnArr
 	}
-	if fingerprint, exists := proxy["client-fingerprint"].(string); exists {
-		options.Enabled = true
-		options.UTLS.Enabled = true
-		options.UTLS.Fingerprint = fingerprint
-	}
-	if reality, exists := proxy["reality-opts"].(map[string]any); exists {
-		options.Enabled = true
-		options.Reality.Enabled = true
-		if pbk, exists := reality["public-key"].(string); exists {
-			options.Reality.PublicKey = pbk
-		}
-		if sid, exists := reality["short-id"].(string); exists {
-			options.Reality.ShortID = sid
+
+	if proxy.Fingerprint != "" {
+		options.UTLS = &option.OutboundUTLSOptions{
+			Enabled:     true,
+			Fingerprint: proxy.Fingerprint,
 		}
 	}
-	return options
+
+	if proxy.RealityOpts != nil {
+		options.Reality = &option.OutboundRealityOptions{
+			Enabled:   true,
+			PublicKey: proxy.RealityOpts.PublicKey,
+			ShortID:   proxy.RealityOpts.ShortID,
+		}
+	}
+	return &options
 }

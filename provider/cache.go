@@ -74,7 +74,7 @@ func (p *Remote) saveCacheContent(rawInfo map[string]int64, options *manager.Opt
 			}
 			data, err := outbound.MarshalJSONContext(p.ctx)
 			if err != nil {
-				p.logger.ErrorContext(p.ctx, E.New("failed to marshal outbound to JSON: ", err))
+				p.logger.ErrorContext(p.ctx, E.New("failed to marshal outbound/", outbound.Type, "[", outbound.Tag, "] to JSON: ", err))
 				continue
 			}
 			outbounds = append(outbounds, data)

@@ -4,26 +4,43 @@ import (
 	"github.com/sagernet/sing-box/option"
 )
 
-func newSMuxOptions(proxy map[string]any) *option.OutboundMultiplexOptions {
-	if smux, exists := proxy["smux"].(map[string]any); exists {
-		options := &option.OutboundMultiplexOptions{}
+type smuxOpts struct {
+	Enabled        bool           `yaml:"enabled"`
+	Protocol       string         `yaml:"protocol"`
+	MaxConnections int            `yaml:"max-connections"`
+	MaxStreams     int            `yaml:"max-streams"`
+	MinStreams     int            `yaml:"min-streams"`
+	Padding        bool           `yaml:"padding"`
+	Brutal         *BrutalOptions `yaml:"brutal-opts"`
+}
 
-		if enabled, exists := smux["enabled"].(bool); exists {
-			options.Enabled = enabled
-		}
-		if protocol, exists := smux["protocol"].(string); exists {
-			options.Protocol = protocol
-		}
-		if maxConnections, exists := smux["max-connections"].(int); exists {
-			options.MaxConnections = maxConnections
-		}
-		if maxStreams, exists := smux["max-streams"].(int); exists {
-			options.MaxStreams = maxStreams
-		}
-		if minStreams, exists := smux["min-streams"].(int); exists {
-			options.MinStreams = minStreams
+type BrutalOptions struct {
+	Enabled  bool `yaml:"enabled"`
+	UpMbps   int  `yaml:"up"`
+	DownMbps int  `yaml:"down"`
+}
+
+func newSMuxOptions(proxy *smuxOpts) *option.OutboundMultiplexOptions {
+	if proxy != nil {
+		options := &option.OutboundMultiplexOptions{
+			Enabled:        proxy.Enabled,
+			Protocol:       proxy.Protocol,
+			MaxConnections: proxy.MaxConnections,
+			MinStreams:     proxy.MaxStreams,
+			MaxStreams:     proxy.MinStreams,
+			Padding:        proxy.Padding,
+			Brutal:         newBrutalOptions(proxy.Brutal),
 		}
 		return options
 	}
 	return nil
+}
+
+func newBrutalOptions(proxy *BrutalOptions) *option.BrutalOptions {
+	options := &option.BrutalOptions{
+		Enabled:  proxy.Enabled,
+		UpMbps:   proxy.UpMbps,
+		DownMbps: proxy.DownMbps,
+	}
+	return options
 }

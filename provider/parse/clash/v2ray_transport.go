@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"fmt"
 	"regexp"
 
 	C "github.com/sagernet/sing-box/constant"
@@ -9,135 +8,127 @@ import (
 	"github.com/sagernet/sing/common/json/badoption"
 )
 
-func newV2RayTransport(proxy map[string]any) *option.V2RayTransportOptions {
-	if network, exists := proxy["network"].(string); exists {
-		Transport := &option.V2RayTransportOptions{}
-		switch network {
-		case C.V2RayTransportTypeHTTP:
-			Transport.Type = C.V2RayTransportTypeHTTP
-			Transport.HTTPOptions = newHTTPTransport(proxy)
-		case C.V2RayTransportTypeWebsocket:
+type V2RayTransportOption struct {
+	HTTPOpts  HTTPOptions  `yaml:"http-opts,omitempty"`
+	HTTP2Opts HTTP2Options `yaml:"h2-opts,omitempty"`
+	GrpcOpts  GrpcOptions  `yaml:"grpc-opts,omitempty"`
+	WSOpts    WSOptions    `yaml:"ws-opts,omitempty"`
+}
+
+type HTTPOptions struct {
+	Method  string              `yaml:"method,omitempty"`
+	Path    []string            `yaml:"path,omitempty"`
+	Headers map[string][]string `yaml:"headers,omitempty"`
+}
+
+type HTTP2Options struct {
+	Host []string `yaml:"host,omitempty"`
+	Path string   `yaml:"path,omitempty"`
+}
+
+type GrpcOptions struct {
+	GrpcServiceName string `yaml:"grpc-service-name,omitempty"`
+}
+
+type WSOptions struct {
+	Path                     string            `yaml:"path,omitempty"`
+	Headers                  map[string]string `yaml:"headers,omitempty"`
+	MaxEarlyData             int               `yaml:"max-early-data,omitempty"`
+	EarlyDataHeaderName      string            `yaml:"early-data-header-name,omitempty"`
+	V2rayHttpUpgrade         bool              `yaml:"v2ray-http-upgrade,omitempty"`
+	V2rayHttpUpgradeFastOpen bool              `yaml:"v2ray-http-upgrade-fast-open,omitempty"`
+}
+
+func newV2RayTransport(network string, proxy *V2RayTransportOption) *option.V2RayTransportOptions {
+	if proxy == nil {
+		return nil
+	}
+
+	Transport := &option.V2RayTransportOptions{}
+	switch network {
+	case C.V2RayTransportTypeHTTP:
+		Transport.Type = C.V2RayTransportTypeHTTP
+		Transport.HTTPOptions = newHTTPTransport(proxy.HTTPOpts)
+
+	case C.V2RayTransportTypeWebsocket:
+		wsOpts, isHTTPUpgrade := newWebsocketTransport(proxy.WSOpts)
+		if isHTTPUpgrade {
+			Transport.Type = C.V2RayTransportTypeHTTPUpgrade
+			Transport.HTTPUpgradeOptions = newHTTPUpgradeTransport(proxy.WSOpts)
+		} else {
 			Transport.Type = C.V2RayTransportTypeWebsocket
-			Transport.WebsocketOptions = newWebsocketTransport(proxy)
-		case C.V2RayTransportTypeGRPC:
-			Transport.Type = C.V2RayTransportTypeGRPC
-			Transport.GRPCOptions = newGRPCTransport(proxy)
+			Transport.WebsocketOptions = wsOpts
 		}
-		return Transport
+
+	case C.V2RayTransportTypeGRPC:
+		Transport.Type = C.V2RayTransportTypeGRPC
+		Transport.GRPCOptions = newGRPCTransport(proxy.GrpcOpts)
 	}
-	return nil
+	return Transport
 }
 
-func newHTTPTransport(proxy map[string]any) option.V2RayHTTPOptions {
+func newHTTPTransport(proxy HTTPOptions) option.V2RayHTTPOptions {
 	options := option.V2RayHTTPOptions{
-		Host:    badoption.Listable[string]{},
-		Headers: map[string]badoption.Listable[string]{},
+		Headers: copyHeaders(proxy.Headers),
 	}
-	if httpOpts, exists := proxy["http-opts"].(map[string]any); exists {
-		if hostsRaw, exists := httpOpts["host"]; exists {
-			switch hosts := hostsRaw.(type) {
-			case []string:
-				options.Host = hosts
-			case string:
-				options.Host = []string{hosts}
-			}
-		}
-		if pathRaw, exists := httpOpts["path"]; exists {
-			switch path := pathRaw.(type) {
-			case []string:
-				options.Path = path[0]
-			case string:
-				options.Path = path
-			}
-		}
-		if method, exists := httpOpts["method"].(string); exists {
-			options.Method = method
-		}
-		if headers, exists := httpOpts["headers"].(map[string]any); exists {
-			for key, valueRaw := range headers {
-				valueArr := []string{}
-				switch value := valueRaw.(type) {
-				case []any:
-					for _, item := range value {
-						valueArr = append(valueArr, fmt.Sprint(item))
-					}
-				default:
-					valueArr = append(valueArr, fmt.Sprint(value))
-				}
-				options.Headers[key] = valueArr
-			}
-		}
+	options.Method = proxy.Method
+	if len(proxy.Path) > 0 {
+		options.Path = proxy.Path[0]
 	}
 	return options
 }
 
-func newWebsocketTransport(proxy map[string]any) option.V2RayWebsocketOptions {
+func newWebsocketTransport(proxy WSOptions) (option.V2RayWebsocketOptions, bool) {
 	options := option.V2RayWebsocketOptions{
-		Headers: map[string]badoption.Listable[string]{},
+		Headers: copyWSHeaders(proxy.Headers),
 	}
-	if wsOpts, exists := proxy["ws-opts"].(map[string]any); exists {
-		if path, exists := wsOpts["path"].(string); exists {
-			reg := regexp.MustCompile(`^(.*?)(?:\?ed=(\d+))?$`)
-			result := reg.FindStringSubmatch(path)
-			options.Path = result[1]
-			if result[2] != "" {
-				options.MaxEarlyData = stringToUint32(result[2])
-				options.EarlyDataHeaderName = "Sec-WebSocket-Protocol"
-			}
-		}
-		if headers, exists := wsOpts["headers"].(map[string]any); exists {
-			for key, valueRaw := range headers {
-				valueArr := []string{}
-				switch value := valueRaw.(type) {
-				case []any:
-					for _, item := range value {
-						valueArr = append(valueArr, fmt.Sprint(item))
-					}
-				default:
-					valueArr = append(valueArr, fmt.Sprint(value))
-				}
-				options.Headers[key] = valueArr
-			}
-		}
-		if maxEarlyData, exists := wsOpts["max-early-data"].(int); exists {
-			options.MaxEarlyData = uint32(maxEarlyData)
-		}
-		if earlyDataHeaderName, exists := wsOpts["early-data-header-name"].(string); exists {
-			options.EarlyDataHeaderName = earlyDataHeaderName
-		}
+	options.Path, options.MaxEarlyData = parseWSPath(proxy.Path)
+	if options.MaxEarlyData != 0 {
+		options.EarlyDataHeaderName = "Sec-WebSocket-Protocol"
 	}
-	if path, exists := proxy["ws-path"].(string); exists {
-		reg := regexp.MustCompile(`^(.*?)(?:\?ed=(\d+))?$`)
-		result := reg.FindStringSubmatch(path)
-		options.Path = result[1]
-		if result[2] != "" {
-			options.MaxEarlyData = stringToUint32(result[2])
-			options.EarlyDataHeaderName = "Sec-WebSocket-Protocol"
-		}
+	return options, proxy.V2rayHttpUpgrade
+}
+
+func newHTTPUpgradeTransport(proxy WSOptions) option.V2RayHTTPUpgradeOptions {
+	options := option.V2RayHTTPUpgradeOptions{
+		Headers: copyWSHeaders(proxy.Headers),
 	}
-	if headers, exists := proxy["ws-headers"].(map[string]any); exists {
-		for key, valueRaw := range headers {
-			valueArr := []string{}
-			switch value := valueRaw.(type) {
-			case []any:
-				for _, item := range value {
-					valueArr = append(valueArr, fmt.Sprint(item))
-				}
-			default:
-				valueArr = append(valueArr, fmt.Sprint(value))
-			}
-			options.Headers[key] = valueArr
-		}
+	options.Path, _ = parseWSPath(proxy.Path)
+	return options
+}
+
+func newGRPCTransport(proxy GrpcOptions) option.V2RayGRPCOptions {
+	options := option.V2RayGRPCOptions{
+		ServiceName: proxy.GrpcServiceName,
 	}
 	return options
 }
 
-func newGRPCTransport(proxy map[string]any) option.V2RayGRPCOptions {
-	options := option.V2RayGRPCOptions{}
-	if grpcOpts, exists := proxy["grpc-opts"].(map[string]any); exists {
-		if servername, exists := grpcOpts["grpc-service-name"].(string); exists {
-			options.ServiceName = servername
-		}
+func copyHeaders(src map[string][]string) map[string]badoption.Listable[string] {
+	dst := make(map[string]badoption.Listable[string], len(src))
+	for k, v := range src {
+		dst[k] = append(dst[k], v...)
 	}
-	return options
+	return dst
+}
+
+func copyWSHeaders(src map[string]string) map[string]badoption.Listable[string] {
+	dst := make(map[string]badoption.Listable[string], len(src))
+	for k, v := range src {
+		dst[k] = append(dst[k], v)
+	}
+	return dst
+}
+
+func parseWSPath(path string) (realPath string, maxEarlyData uint32) {
+	reg := regexp.MustCompile(`^(.*?)(?:\?ed=(\d+))?$`)
+	result := reg.FindStringSubmatch(path)
+	if len(result) < 2 {
+		return path, 0
+	}
+	realPath = result[1]
+	if len(result) >= 3 && result[2] != "" {
+		maxEarlyData = stringToUint32(result[2])
+	}
+	return
 }

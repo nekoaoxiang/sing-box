@@ -1,65 +1,73 @@
 package provider
 
 import (
-	"fmt"
+	"strings"
 
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 )
 
-func newClashHysteria2(proxy map[string]any) (*option.Outbound, error) {
+type Hysteria2Option struct {
+	BaseProxy     `yaml:",inline"`
+	DialerOptions `yaml:",inline"`
+	Ports         string `yaml:"ports,omitempty"`
+	HopInterval   string `yaml:"hop-interval,omitempty"`
+	Up            int    `yaml:"up,omitempty"`
+	Down          int    `yaml:"down,omitempty"`
+	Password      string `yaml:"password,omitempty"`
+	Obfs          string `yaml:"obfs,omitempty"`
+	ObfsPassword  string `yaml:"obfs-password,omitempty"`
+	*TLSOption    `yaml:",inline"`
+
+	CustomCA       string `yaml:"ca,omitempty"`
+	CustomCAString string `yaml:"ca-str,omitempty"`
+}
+
+func newClashHysteria2(tag string, proxy Hysteria2Option) (*option.Outbound, error) {
 	outbound := &option.Outbound{
 		Type: C.TypeHysteria2,
-	}
-	options := &option.Hysteria2OutboundOptions{}
-	obfsOptions := &option.Hysteria2Obfs{}
-
-	if name, exists := proxy["name"].(string); exists {
-		outbound.Tag = name
-	}
-	if server, exists := proxy["server"].(string); exists {
-		options.Server = server
-	}
-	if port, exists := proxy["port"]; exists {
-		options.ServerPort = stringToUint16(fmt.Sprint(port))
-	}
-	if password, exists := proxy["password"].(string); exists {
-		options.Password = password
-	}
-	if up, exists := proxy["up"].(int); exists {
-		options.UpMbps = up
-	}
-	if down, exists := proxy["down"].(int); exists {
-		options.DownMbps = down
+		Tag:  tag,
 	}
 
-	if obfs, exists := proxy["obfs"].(string); exists && obfs == "salamander" {
-		obfsOptions.Type = obfs
-	}
-	if obfsPassword, exists := proxy["obfs-password"].(string); exists {
-		obfsOptions.Password = obfsPassword
+	options := &option.Hysteria2OutboundOptions{
+		ServerOptions: option.ServerOptions{
+			Server:     proxy.BaseProxy.Server,
+			ServerPort: proxy.BaseProxy.Port,
+		},
+		ServerPorts: convertPortRange(proxy.Ports),
+		Password:    proxy.Password,
+		Network:     clashNetworks(proxy.BaseProxy.UDP),
+		UpMbps:      proxy.Up,
+		DownMbps:    proxy.Up,
+
+		DialerOptions: newDialerOptions(proxy.DialerOptions),
 	}
 
-	if obfsOptions.Type != "" {
-		options.Obfs = obfsOptions
-	}
-
-	options.TLS = newTLSOptions(proxy)
-	options.TLS.Enabled = true
-
-	if ca, exists := proxy["ca"]; exists {
-		options.TLS.CertificatePath = fmt.Sprint(ca)
-	}
-	if caStr, exists := proxy["ca-str"].([]any); exists {
-		caStrArr := []string{}
-		for _, item := range caStr {
-			caStrArr = append(caStrArr, fmt.Sprint(item))
+	if proxy.Obfs != "" {
+		options.Obfs = &option.Hysteria2Obfs{
+			Type:     proxy.Obfs,
+			Password: proxy.ObfsPassword,
 		}
-		options.TLS.Certificate = caStrArr
 	}
 
-	options.DialerOptions = newDialerOptions(proxy)
+	options.TLS = newTLSOptions(proxy.TLSOption)
+	options.TLS.CertificatePath = proxy.CustomCA
+	if proxy.CustomCAString != "" {
+		options.TLS.Certificate = append(options.TLS.Certificate, proxy.CustomCAString)
+	}
 
 	outbound.Options = options
 	return outbound, nil
+}
+
+func convertPortRange(input string) []string {
+	if strings.Contains(input, "-") {
+		parts := strings.Split(input, "-")
+		if len(parts) == 2 {
+			start := strings.TrimSpace(parts[0])
+			end := strings.TrimSpace(parts[1])
+			return []string{start + ":" + end}
+		}
+	}
+	return nil
 }

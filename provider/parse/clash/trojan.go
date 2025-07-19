@@ -1,36 +1,36 @@
 package provider
 
 import (
-	"fmt"
-
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 )
 
-func newClashTrojan(proxy map[string]any) (*option.Outbound, error) {
+type TrojanOption struct {
+	BaseProxy             `yaml:",inline"`
+	DialerOptions         `yaml:",inline"`
+	Password              string `yaml:"password"`
+	*TLSOption            `yaml:",inline"`
+	Network               string `yaml:"network,omitempty"`
+	*V2RayTransportOption `yaml:",inline"`
+}
+
+func newClashTrojan(tag string, proxy TrojanOption) (*option.Outbound, error) {
 	outbound := &option.Outbound{
 		Type: C.TypeTrojan,
+		Tag:  tag,
 	}
-	options := &option.TrojanOutboundOptions{}
-
-	if name, exists := proxy["name"].(string); exists {
-		outbound.Tag = name
-	}
-	if server, exists := proxy["server"].(string); exists {
-		options.Server = server
-	}
-	if port, exists := proxy["port"]; exists {
-		options.ServerPort = stringToUint16(fmt.Sprint(port))
-	}
-	if password, exists := proxy["password"].(string); exists {
-		options.Password = password
+	options := &option.TrojanOutboundOptions{
+		ServerOptions: option.ServerOptions{
+			Server:     proxy.BaseProxy.Server,
+			ServerPort: proxy.BaseProxy.Port,
+		},
+		Password: proxy.Password,
 	}
 
-	options.TLS = newTLSOptions(proxy)
-	options.TLS.Enabled = true
-	options.Multiplex = newSMuxOptions(proxy)
-	options.Transport = newV2RayTransport(proxy)
-	options.DialerOptions = newDialerOptions(proxy)
+	options.TLS = newTLSOptions(proxy.TLSOption)
+	options.Multiplex = newSMuxOptions(proxy.Smux)
+	options.Transport = newV2RayTransport(proxy.Network, proxy.V2RayTransportOption)
+	options.DialerOptions = newDialerOptions(proxy.DialerOptions)
 
 	outbound.Options = options
 	return outbound, nil

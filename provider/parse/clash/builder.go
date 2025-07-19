@@ -1,59 +1,47 @@
 package provider
 
 import (
-	"fmt"
 	"strconv"
+
+	E "github.com/sagernet/sing/common/exceptions"
+	N "github.com/sagernet/sing/common/network"
+	"gopkg.in/yaml.v3"
 
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/provider/manager"
-
-	"gopkg.in/yaml.v3"
 )
 
-type ClashConfig struct {
-	Proxies []map[string]any `yaml:"proxies"`
+var globalRegistry = &Registry{
+	optionsType:  make(map[string]optionsConstructorFunc),
+	constructors: make(map[string]constructorFunc),
 }
 
-func NewClashParser(raw []byte) (*manager.Options, error) {
-	var config ClashConfig
-	err := yaml.Unmarshal(raw, &config)
-	if err != nil {
-		return nil, err
+func init() {
+	Register[ShadowSocksOption](globalRegistry, "ss", newClashShadowsocks)
+	Register[VMessOption](globalRegistry, C.TypeVMess, newClashVMess)
+	Register[VlessOption](globalRegistry, C.TypeVLESS, newClashVLESS)
+	Register[TrojanOption](globalRegistry, C.TypeTrojan, newClashTrojan)
+	Register[AnyTLSOption](globalRegistry, C.TypeAnyTLS, newClashAnyTLS)
+	Register[Hysteria2Option](globalRegistry, C.TypeHysteria2, newClashHysteria2)
+}
+
+func NewClashParser(content []byte) (*manager.Options, error) {
+	var config *Clash
+	if err := yaml.Unmarshal(content, &config); err != nil {
+		return nil, E.Cause(err, "failed to unmarshal clash config: %w")
 	}
 	if len(config.Proxies) == 0 {
-		return nil, fmt.Errorf("no outbounds found in clash config")
+		return nil, E.New("no outbounds found in clash config")
 	}
 
-	var outbounds []option.Outbound
+	outbounds := make([]option.Outbound, 0, len(config.Proxies))
 	for _, proxy := range config.Proxies {
-		var (
-			outbound *option.Outbound
-			err      error
-		)
-
-		protocol, exists := proxy["type"]
-		if !exists {
-			continue
+		outbound, err := globalRegistry.CreateOutbound(proxy.Name, proxy.Type, proxy.Options)
+		if err != nil {
+			return nil, err
 		}
-
-		switch protocol {
-		case "ss":
-			outbound, err = newClashShadowsocks(proxy)
-		case C.TypeVMess:
-			outbound, err = newClashVMess(proxy)
-		case C.TypeTrojan:
-			outbound, err = newClashTrojan(proxy)
-		case C.TypeVLESS:
-			outbound, err = newClashVLESS(proxy)
-		case C.TypeHysteria2:
-			outbound, err = newClashHysteria2(proxy)
-		default:
-			continue
-		}
-		if err == nil {
-			outbounds = append(outbounds, *outbound)
-		}
+		outbounds = append(outbounds, *outbound)
 	}
 
 	options := &manager.Options{
@@ -65,12 +53,18 @@ func NewClashParser(raw []byte) (*manager.Options, error) {
 	return options, nil
 }
 
-func stringToUint16(content string) uint16 {
-	intNum, _ := strconv.Atoi(content)
-	return uint16(intNum)
+func clashNetworks(udpEnabled *bool) option.NetworkList {
+	if udpEnabled == nil || *udpEnabled {
+		return ""
+	} else {
+		return N.NetworkTCP
+	}
 }
 
-func stringToUint32(content string) uint32 {
-	intNum, _ := strconv.Atoi(content)
-	return uint32(intNum)
+func stringToUint32(s string) uint32 {
+	v, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		return 0
+	}
+	return uint32(v)
 }

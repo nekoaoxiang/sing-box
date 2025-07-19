@@ -56,7 +56,7 @@ func (p *Manager) createOutbounds(options []option.Outbound) error {
 			outboundOptions.Options,
 		)
 		if err != nil {
-			return E.Cause(err, "initialize outbound[", i, "]")
+			return E.Cause(err, "initialize outbound[", tag, "]")
 		}
 	}
 	return nil

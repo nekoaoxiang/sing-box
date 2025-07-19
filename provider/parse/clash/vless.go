@@ -1,38 +1,40 @@
 package provider
 
 import (
-	"fmt"
-
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 )
 
-func newClashVLESS(proxy map[string]any) (*option.Outbound, error) {
+type VlessOption struct {
+	BaseProxy             `yaml:",inline"`
+	DialerOptions         `yaml:",inline"`
+	UUID                  string `yaml:"uuid"`
+	Flow                  string `yaml:"flow,omitempty"`
+	PacketAddr            bool   `yaml:"packet-addr,omitempty"`
+	PacketEncoding        string `yaml:"packet-encoding,omitempty"`
+	Network               string `yaml:"network,omitempty"`
+	*TLSOption            `yaml:",inline"`
+	*V2RayTransportOption `yaml:",inline"`
+}
+
+func newClashVLESS(tag string, proxy VlessOption) (*option.Outbound, error) {
 	outbound := &option.Outbound{
 		Type: C.TypeVLESS,
+		Tag:  tag,
 	}
-	options := &option.VLESSOutboundOptions{}
+	options := &option.VLESSOutboundOptions{
+		ServerOptions: option.ServerOptions{
+			Server:     proxy.BaseProxy.Server,
+			ServerPort: proxy.BaseProxy.Port,
+		},
+	}
+	options.UUID = proxy.UUID
+	options.Flow = proxy.Flow
 
-	if name, exists := proxy["name"].(string); exists {
-		outbound.Tag = name
-	}
-	if server, exists := proxy["server"].(string); exists {
-		options.Server = server
-	}
-	if port, exists := proxy["port"]; exists {
-		options.ServerPort = stringToUint16(fmt.Sprint(port))
-	}
-	if uuid, exists := proxy["uuid"].(string); exists {
-		options.UUID = uuid
-	}
-	if flow, exists := proxy["flow"].(string); exists && flow == "xtls-rprx-vision" {
-		options.Flow = "xtls-rprx-vision"
-	}
-
-	options.TLS = newTLSOptions(proxy)
-	options.Transport = newV2RayTransport(proxy)
-	options.Multiplex = newSMuxOptions(proxy)
-	options.DialerOptions = newDialerOptions(proxy)
+	options.TLS = newTLSOptions(proxy.TLSOption)
+	options.Transport = newV2RayTransport(proxy.Network, proxy.V2RayTransportOption)
+	options.Multiplex = newSMuxOptions(proxy.Smux)
+	options.DialerOptions = newDialerOptions(proxy.DialerOptions)
 
 	outbound.Options = options
 	return outbound, nil

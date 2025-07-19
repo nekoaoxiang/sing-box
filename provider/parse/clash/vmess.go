@@ -1,41 +1,48 @@
 package provider
 
 import (
-	"fmt"
-
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
 )
 
-func newClashVMess(proxy map[string]any) (*option.Outbound, error) {
+type VMessOption struct {
+	BaseProxy             `yaml:",inline"`
+	DialerOptions         `yaml:",inline"`
+	UUID                  string `yaml:"uuid"`
+	AlterID               int    `yaml:"alterId"`
+	Cipher                string `yaml:"cipher"`
+	Network               string `yaml:"network,omitempty"`
+	*TLSOption            `yaml:",inline"`
+	PacketAddr            bool   `yaml:"packet-addr,omitempty"`
+	PacketEncoding        string `yaml:"packet-encoding,omitempty"`
+	GlobalPadding         bool   `yaml:"global-padding,omitempty"`
+	AuthenticatedLength   bool   `yaml:"authenticated-length,omitempty"`
+	*V2RayTransportOption `yaml:",inline"`
+}
+
+func newClashVMess(tag string, proxy VMessOption) (*option.Outbound, error) {
 	outbound := &option.Outbound{
 		Type: C.TypeVMess,
+		Tag:  tag,
 	}
-	options := &option.VMessOutboundOptions{}
-
-	if name, exists := proxy["name"].(string); exists {
-		outbound.Tag = name
-	}
-	if server, exists := proxy["server"].(string); exists {
-		options.Server = server
-	}
-	if port, exists := proxy["port"]; exists {
-		options.ServerPort = stringToUint16(fmt.Sprint(port))
-	}
-	if uuid, exists := proxy["uuid"].(string); exists {
-		options.UUID = uuid
-	}
-	if aid, exists := proxy["alterId"].(int); exists {
-		options.AlterId = aid
-	}
-	if cipher, exists := proxy["cipher"].(string); exists {
-		options.Security = cipher
+	options := &option.VMessOutboundOptions{
+		ServerOptions: option.ServerOptions{
+			Server:     proxy.BaseProxy.Server,
+			ServerPort: proxy.BaseProxy.Port,
+		},
+		UUID:                proxy.UUID,
+		Security:            proxy.Cipher,
+		AlterId:             proxy.AlterID,
+		GlobalPadding:       proxy.GlobalPadding,
+		AuthenticatedLength: proxy.AuthenticatedLength,
+		Network:             clashNetworks(proxy.BaseProxy.UDP),
+		PacketEncoding:      proxy.PacketEncoding,
 	}
 
-	options.TLS = newTLSOptions(proxy)
-	options.Multiplex = newSMuxOptions(proxy)
-	options.Transport = newV2RayTransport(proxy)
-	options.DialerOptions = newDialerOptions(proxy)
+	options.TLS = newTLSOptions(proxy.TLSOption)
+	options.Multiplex = newSMuxOptions(proxy.Smux)
+	options.Transport = newV2RayTransport(proxy.Network, proxy.V2RayTransportOption)
+	options.DialerOptions = newDialerOptions(proxy.DialerOptions)
 
 	outbound.Options = options
 	return outbound, nil
