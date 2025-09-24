@@ -4,16 +4,14 @@ import (
 	"encoding/base64"
 	"strings"
 
-	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/provider/manager"
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
 // NewRawParser attempts to decode the given content as URL-safe Base64;
 // if successful, it parses the decoded subscription. Otherwise, it treats
 // the original content as raw subscription data.
-func NewRawParser(content string) (*manager.Options, error) {
+func NewRawParser(content string) (*option.Options, error) {
 	decoded, err := tryDecodeURLSafeBase64(content)
 	if err == nil {
 		if opts, err := parseRawSubscription(decoded); err == nil && len(opts.Outbounds) > 0 {
@@ -48,7 +46,7 @@ func tryDecodeURLSafeBase64(input string) (string, error) {
 
 // parseRawSubscription splits the subscription content by newlines and
 // collects valid Outbound configurations. Returns an error if none found.
-func parseRawSubscription(raw string) (*manager.Options, error) {
+func parseRawSubscription(raw string) (*option.Options, error) {
 	lines := strings.FieldsFunc(raw, func(r rune) bool {
 		// split on any linebreak
 		return r == '\r' || r == '\n'
@@ -71,10 +69,7 @@ func parseRawSubscription(raw string) (*manager.Options, error) {
 		return nil, E.New("no servers found in subscription content")
 	}
 
-	return &manager.Options{
-		Type: C.TypeRawConfig,
-		Options: option.Options{
-			Outbounds: outbounds,
-		},
+	return &option.Options{
+		Outbounds: outbounds,
 	}, nil
 }

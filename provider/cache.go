@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 
 	C "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/provider/manager"
+	"github.com/sagernet/sing-box/option"
 	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/json"
 )
@@ -29,17 +29,24 @@ func (s *subInfo) UnmarshalJSONContext(ctx context.Context, content []byte) erro
 }
 
 type cacheOptions struct {
-	Info subInfo `json:"info,omitempty"`
+	Info subInfo `json:"info"`
 }
 
 func (r *Remote) parseCacheFile() error {
 	fileInfo, err := os.Stat(r.path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			// 没有缓存文件，正常返回（首次运行）
+			r.logger.InfoContext(r.ctx, "cache file not found: ", r.path)
+			return nil
+		}
+		// 其他 IO 错误，返回以便上层处理
 		return err
 	}
 	r.lastUpdateTime = fileInfo.ModTime()
 	content, err := os.ReadFile(r.path)
 	if err != nil {
+		r.logger.ErrorContext(r.ctx, "read cache file failed: ", err)
 		return err
 	}
 	rawInfo, options, err := r.parseCacheContent(content)
@@ -55,11 +62,13 @@ func (r *Remote) parseCacheFile() error {
 		info["Expire"] = rawInfo.Expire
 		r.subInfo = info
 	}
-	r.NewOptions(options)
+	r.UpdateOutbounds([]option.Outbound{}, options)
+
+	r.logger.InfoContext(r.ctx, "loaded cache and applied outbounds, count=", len(options))
 	return nil
 }
 
-func (p *Remote) saveCacheContent(rawInfo map[string]int64, options *manager.Options) {
+func (p *Remote) saveCacheContent(rawInfo map[string]int64, options *option.Options) {
 	cacheContentMap := make(map[string]any)
 	if rawInfo != nil {
 		cacheContentMap["info"] = rawInfo
@@ -101,15 +110,31 @@ func (p *Remote) saveCacheContent(rawInfo map[string]int64, options *manager.Opt
 	}
 }
 
-func (p *Remote) parseCacheContent(content []byte) (*subInfo, *manager.Options, error) {
-	info, err := json.UnmarshalExtendedContext[cacheOptions](p.ctx, content)
+func (p *Remote) parseCacheContent(content []byte) (*subInfo, []option.Outbound, error) {
+	options, err := json.UnmarshalExtendedContext[cacheOptions](p.ctx, content)
 	if err != nil {
 		return nil, nil, E.Cause(err, "decode config at ", p.path)
 	}
 
-	options, err := json.UnmarshalExtendedContext[manager.Options](p.ctx, content)
-	if err != nil {
-		return nil, nil, E.Cause(err, "decode config at ", p.path)
+	var raw struct {
+		Outbounds []json.RawMessage
 	}
-	return &info.Info, &options, nil
+	err = json.UnmarshalContext(p.ctx, content, &raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	var outbounds []option.Outbound
+	for i, raw := range raw.Outbounds {
+		var ob option.Outbound
+		if err := ob.UnmarshalJSONContext(p.ctx, raw); err != nil {
+			p.logger.WarnContext(
+				p.ctx,
+				"failed to unmarshal outbound #", i, ": ", err,
+			)
+			continue
+		}
+		outbounds = append(outbounds, ob)
+	}
+
+	return &options.Info, outbounds, nil
 }

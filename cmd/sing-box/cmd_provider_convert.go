@@ -109,7 +109,7 @@ func convertProvider(sourceUrl string) error {
 	}
 
 	cacheContentMap := make(map[string]any)
-	cacheContentMap["type"] = options.Type
+	// cacheContentMap["type"] = options.Type
 	cacheContentMap["outbounds"] = outbounds
 
 	content, err = json.Marshal(cacheContentMap)

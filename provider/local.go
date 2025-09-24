@@ -11,8 +11,6 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/protocol/group"
-	"github.com/sagernet/sing-box/provider/manager"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
@@ -41,30 +39,18 @@ func NewLocal(ctx context.Context, router adapter.Router, factory log.Factory, t
 	provider := &Local{
 		MyProviderAdapter: MyProviderAdapter{
 			Adapter: provider.NewAdapter(C.TypeLocal, tag),
-			Manager: manager.NewManager(ctx, logger, router, tag, factory),
 			ctx:     ctx,
 			logger:  logger,
 
 			path: options.Path,
 		},
 	}
-	if options.Filter != nil {
-		if options.Filter.Includes != nil {
-			includes, err := group.NewProviderFilter(options.Filter.Includes)
-			if err != nil {
-				return nil, err
-			}
-			provider.includes = includes
-		}
 
-		if options.Filter.Excludes != nil {
-			excludes, err := group.NewProviderFilter(options.Filter.Excludes)
-			if err != nil {
-				return nil, err
-			}
-			provider.excludes = excludes
-		}
+	process, err := NewProcessOptions(options.Filter)
+	if err != nil {
+		return nil, err
 	}
+	provider.process = process
 	return provider, nil
 }
 
@@ -86,8 +72,7 @@ func (l *Local) parseProviderFile() error {
 		return err
 	}
 
-	l.NewOptions(options)
-
+	l.UpdateOutbounds(l.lastOutOpts, options.Outbounds)
 	return nil
 }
 
@@ -130,6 +115,6 @@ func (s *Local) loopUpdate() error {
 	return nil
 }
 
-func (s *Local) Close() error {
-	return common.Close(common.PtrOrNil(s.watcher))
+func (l *Local) Close() error {
+	return common.Close(common.PtrOrNil(l.watcher))
 }

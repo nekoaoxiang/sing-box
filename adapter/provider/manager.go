@@ -2,9 +2,9 @@ package provider
 
 import (
 	"context"
-	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/taskmonitor"
@@ -12,6 +12,7 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
+	F "github.com/sagernet/sing/common/format"
 	"github.com/sagernet/sing/common/logger"
 )
 
@@ -54,25 +55,26 @@ func (m *Manager) Start(stage adapter.StartStage) error {
 }
 
 func (m *Manager) Close() error {
-	monitor := taskmonitor.New(m.logger, C.StopTimeout)
 	m.access.Lock()
+	defer m.access.Unlock()
 	if !m.started {
-		m.access.Unlock()
 		return nil
 	}
 	m.started = false
 	providers := m.providers
 	m.providers = nil
-	m.access.Unlock()
+	monitor := taskmonitor.New(m.logger, C.StopTimeout)
 	var err error
 	for _, provider := range providers {
-		if closer, isCloser := provider.(io.Closer); isCloser {
-			monitor.Start("close provider/", provider.Type(), "[", provider.Tag(), "]")
-			err = E.Append(err, closer.Close(), func(err error) error {
-				return E.Cause(err, "close provider/", provider.Type(), "[", provider.Tag(), "]")
-			})
-			monitor.Finish()
-		}
+		name := "provider/" + provider.Type() + "[" + provider.Tag() + "]"
+		m.logger.Trace("close ", name)
+		startTime := time.Now()
+		monitor.Start("close ", name)
+		err = E.Append(err, provider.Close(), func(err error) error {
+			return E.Cause(err, "close ", name)
+		})
+		monitor.Finish()
+		m.logger.Trace("close ", name, " completed (", F.Seconds(time.Since(startTime).Seconds()), "s)")
 	}
 	return nil
 }

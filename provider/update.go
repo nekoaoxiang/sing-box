@@ -56,7 +56,7 @@ func (r *Remote) UpdateProvider() error {
 		return err
 	}
 
-	r.NewOptions(options)
+	r.UpdateOutbounds(r.lastOutOpts, options.Outbounds)
 
 	if r.path != "" {
 		r.saveCacheContent(subInfo, options)

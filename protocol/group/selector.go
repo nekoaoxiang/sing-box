@@ -11,6 +11,7 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
+	"github.com/sagernet/sing-box/provider"
 	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -64,22 +65,11 @@ func NewSelector(ctx context.Context, router adapter.Router, logger log.ContextL
 		return nil, E.New("missing tags and uses")
 	}
 
-	if options.Filter != nil {
-		if options.Filter.Includes != nil {
-			includes, err := NewProviderFilter(options.Filter.Includes)
-			if err != nil {
-				return nil, err
-			}
-			outbound.includes = includes
-		}
-		if options.Filter.Excludes != nil {
-			excludes, err := NewProviderFilter(options.Filter.Excludes)
-			if err != nil {
-				return nil, err
-			}
-			outbound.excludes = excludes
-		}
+	process, err := provider.NewProcessOptions(options.Filter)
+	if err != nil {
+		return nil, err
 	}
+	outbound.process = process
 	return outbound, nil
 }
 

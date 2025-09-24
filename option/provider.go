@@ -52,8 +52,8 @@ type ProviderOptions struct {
 	Path             string                   `json:"path,omitempty"`
 	Tag              string                   `json:"tag,omitempty"`
 	OutboundOverride *OutboundOverrideOptions `json:"outbound_override,omitempty"`
-	HealthCheck      *HealthCheckOptions      `json:"health_check,omitempty"`
-	Filter           *FilterOptions           `json:"filter,omitempty"`
+	// HealthCheck      *HealthCheckOptions      `json:"health_check,omitempty"`
+	Filter *FilterOptions `json:"filter,omitempty"`
 }
 
 type RemoteProviderOptions struct {
@@ -68,30 +68,30 @@ type LocalProviderOptions struct {
 	ProviderOptions
 }
 
-type HealthCheckOptions struct {
-	Enable   bool               `json:"enable,omitempty"`
-	Url      string             `json:"url,omitempty"`
-	Interval badoption.Duration `json:"interval,omitempty"`
-}
+// type HealthCheckOptions struct {
+// 	Enable   bool               `json:"enable,omitempty"`
+// 	Url      string             `json:"url,omitempty"`
+// 	Interval badoption.Duration `json:"interval,omitempty"`
+// }
 
 type OutboundOverrideOptions struct {
 	TagPrefix string `json:"tag_prefix,omitempty"`
 	TagSuffix string `json:"tag_suffix,omitempty"`
-	*OverrideDialerOptions
+	*DialerOptions
 }
 
-type OverrideDialerOptions struct {
-	Detour           *string             `json:"detour,omitempty"`
-	BindInterface    *string             `json:"bind_interface,omitempty"`
-	Inet4BindAddress *badoption.Addr     `json:"inet4_bind_address,omitempty"`
-	Inet6BindAddress *badoption.Addr     `json:"inet6_bind_address,omitempty"`
-	ProtectPath      *string             `json:"protect_path,omitempty"`
-	RoutingMark      *uint32             `json:"routing_mark,omitempty"`
-	ReuseAddr        *bool               `json:"reuse_addr,omitempty"`
-	ConnectTimeout   *badoption.Duration `json:"connect_timeout,omitempty"`
-	TCPFastOpen      *bool               `json:"tcp_fast_open,omitempty"`
-	TCPMultiPath     *bool               `json:"tcp_multi_path,omitempty"`
-	UDPFragment      *bool               `json:"udp_fragment,omitempty"`
-	DomainStrategy   *DomainStrategy     `json:"domain_strategy,omitempty"`
-	FallbackDelay    *badoption.Duration `json:"fallback_delay,omitempty"`
-}
+// type OverrideDialerOptions struct {
+// 	Detour           *string             `json:"detour,omitempty"`
+// 	BindInterface    *string             `json:"bind_interface,omitempty"`
+// 	Inet4BindAddress *badoption.Addr     `json:"inet4_bind_address,omitempty"`
+// 	Inet6BindAddress *badoption.Addr     `json:"inet6_bind_address,omitempty"`
+// 	ProtectPath      *string             `json:"protect_path,omitempty"`
+// 	RoutingMark      *uint32             `json:"routing_mark,omitempty"`
+// 	ReuseAddr        *bool               `json:"reuse_addr,omitempty"`
+// 	ConnectTimeout   *badoption.Duration `json:"connect_timeout,omitempty"`
+// 	TCPFastOpen      *bool               `json:"tcp_fast_open,omitempty"`
+// 	TCPMultiPath     *bool               `json:"tcp_multi_path,omitempty"`
+// 	UDPFragment      *bool               `json:"udp_fragment,omitempty"`
+// 	DomainStrategy   *DomainStrategy     `json:"domain_strategy,omitempty"`
+// 	FallbackDelay    *badoption.Duration `json:"fallback_delay,omitempty"`
+// }

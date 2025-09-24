@@ -5,13 +5,12 @@ import (
 
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/provider/manager"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/json"
 )
 
-func NewSingBoxParser(ctx context.Context, content []byte) (*manager.Options, error) {
-	options, err := json.UnmarshalExtendedContext[manager.Options](ctx, content)
+func NewSingBoxParser(ctx context.Context, content []byte) (*option.Options, error) {
+	options, err := json.UnmarshalExtendedContext[option.Options](ctx, content)
 	if err != nil {
 		return nil, err
 	}
@@ -24,6 +23,6 @@ func NewSingBoxParser(ctx context.Context, content []byte) (*manager.Options, er
 		}
 	})
 
-	options.Type = C.TypeSingBoxConfig
+	// options.Type = C.TypeSingBoxConfig
 	return &options, nil
 }

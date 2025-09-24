@@ -6,8 +6,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/url"
-	"runtime"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -15,8 +13,6 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/protocol/group"
-	"github.com/sagernet/sing-box/provider/manager"
 	E "github.com/sagernet/sing/common/exceptions"
 	F "github.com/sagernet/sing/common/format"
 	M "github.com/sagernet/sing/common/metadata"
@@ -51,18 +47,6 @@ func NewRemote(ctx context.Context, router adapter.Router, factory log.Factory, 
 		return nil, E.New("missing url")
 	}
 
-	parsedURL, err := url.Parse(options.Url)
-	if err != nil {
-		return nil, err
-	}
-	switch parsedURL.Scheme {
-	case "":
-		parsedURL.Scheme = "http"
-	case "http", "https":
-	default:
-		return nil, E.New("invalid url scheme")
-	}
-
 	ua := options.UserAgent
 	if ua == "" {
 		ua = "sing-box " + C.Version + "; Clash compatible"
@@ -78,41 +62,41 @@ func NewRemote(ctx context.Context, router adapter.Router, factory log.Factory, 
 	provider := &Remote{
 		MyProviderAdapter: MyProviderAdapter{
 			Adapter: provider.NewAdapter(C.TypeRemote, tag),
-			Manager: manager.NewManager(ctx, logger, router, tag, factory),
 			ctx:     ctx,
 			logger:  logger,
 
+			factory: factory,
+
 			path: filemanager.BasePath(ctx, options.Path),
 		},
-		url:      parsedURL.String(),
+		url:      options.Url,
 		ua:       ua,
 		interval: downloadInterval,
 		detour:   options.Detour,
 	}
-	if options.Filter != nil {
-		if options.Filter.Includes != nil {
-			includes, err := group.NewProviderFilter(options.Filter.Includes)
-			if err != nil {
-				return nil, err
-			}
-			provider.includes = includes
-		}
+	provider.provider = provider.newProviderManager()
+	provider.endpoint = provider.newEndpointManager()
+	provider.outbound = provider.newOutboundManager()
 
-		if options.Filter.Excludes != nil {
-			excludes, err := group.NewProviderFilter(options.Filter.Excludes)
-			if err != nil {
-				return nil, err
-			}
-			provider.excludes = excludes
-		}
+	process, err := NewProcessOptions(options.Filter)
+	if err != nil {
+		return nil, err
 	}
+	provider.process = process
 	return provider, nil
 }
 
 func (r *Remote) Start(stage adapter.StartStage) error {
 	switch stage {
 	case adapter.StartStateInitialize:
-		r.parseCacheFile()
+		err := r.startManager()
+		if err != nil {
+			return err
+		}
+		err = r.parseCacheFile()
+		if err != nil {
+			return err
+		}
 	case adapter.StartStatePostStart:
 		outbound := service.FromContext[adapter.OutboundManager](r.ctx)
 		var dialer N.Dialer
@@ -135,8 +119,13 @@ func (r *Remote) Start(stage adapter.StartStage) error {
 func (p *Remote) loopUpdate() {
 	timeSinceLastUpdate := time.Since(p.lastUpdateTime)
 	initialWait := max(p.interval-timeSinceLastUpdate, 0)
-	time.Sleep(initialWait)
+	select {
+	case <-time.After(initialWait): // 不要用 time.Sleep
+	case <-p.ctx.Done():
+		return
+	}
 	p.UpdateProvider()
+
 	p.ticker = time.NewTicker(p.interval)
 	for {
 		select {
@@ -149,7 +138,6 @@ func (p *Remote) loopUpdate() {
 }
 
 func (r *Remote) fetch() ([]byte, string, error) {
-	defer runtime.GC()
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			ForceAttemptHTTP2:   true,
@@ -202,9 +190,24 @@ func (r *Remote) fetch() ([]byte, string, error) {
 }
 
 func (r *Remote) Close() error {
-	if r.ticker == nil {
-		return nil
+	if r.ticker != nil {
+		r.ticker.Stop()
 	}
-	r.ticker.Stop()
+	var err error
+	for _, closeItem := range []struct {
+		name    string
+		service adapter.Lifecycle
+	}{
+		{"endpoint", r.endpoint},
+		{"outbound", r.outbound},
+		{"provider", r.provider},
+	} {
+		r.logger.Trace("close ", closeItem.name)
+		startTime := time.Now()
+		err = E.Append(err, closeItem.service.Close(), func(err error) error {
+			return E.Cause(err, "close ", closeItem.name)
+		})
+		r.logger.Trace("close ", closeItem.name, " completed (", F.Seconds(time.Since(startTime).Seconds()), "s)")
+	}
 	return nil
 }

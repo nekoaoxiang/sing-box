@@ -9,7 +9,6 @@ type TLSOption struct {
 	TLS               bool            `yaml:"tls,omitempty"`
 	SNI               string          `yaml:"sni,omitempty"`
 	ServerName        string          `yaml:"servername,omitempty"`
-	Fingerprint       string          `yaml:"fingerprint,omitempty"`
 	ALPN              []string        `yaml:"alpn,omitempty"`
 	SkipCertVerify    bool            `yaml:"skip-cert-verify,omitempty"`
 	ClientFingerprint string          `yaml:"client-fingerprint,omitempty"`
@@ -54,10 +53,10 @@ func newTLSOptions(proxy *TLSOption) *option.OutboundTLSOptions {
 		}
 	}
 
-	if proxy.Fingerprint != "" {
+	if proxy.ClientFingerprint != "" {
 		options.UTLS = &option.OutboundUTLSOptions{
 			Enabled:     true,
-			Fingerprint: proxy.Fingerprint,
+			Fingerprint: proxy.ClientFingerprint,
 		}
 	}
 

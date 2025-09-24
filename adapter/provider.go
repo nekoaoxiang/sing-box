@@ -9,6 +9,7 @@ import (
 )
 
 type Provider interface {
+	Lifecycle
 	Tag() string
 	Type() string
 

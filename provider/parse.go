@@ -3,7 +3,8 @@ package provider
 import (
 	"context"
 
-	"github.com/sagernet/sing-box/provider/manager"
+	// "github.com/sagernet/sing-box/provider/manager"
+	"github.com/sagernet/sing-box/option"
 	clash "github.com/sagernet/sing-box/provider/parse/clash"
 	raw "github.com/sagernet/sing-box/provider/parse/raw"
 	singBox "github.com/sagernet/sing-box/provider/parse/singBox"
@@ -11,9 +12,9 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 )
 
-func NewParser(ctx context.Context, content []byte) (*manager.Options, error) {
+func NewParser(ctx context.Context, content []byte) (*option.Options, error) {
 	var (
-		options *manager.Options
+		options *option.Options
 		err     error
 	)
 	options, err = singBox.NewSingBoxParser(ctx, content)

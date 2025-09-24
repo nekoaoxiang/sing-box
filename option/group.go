@@ -10,6 +10,7 @@ type FilterList struct {
 type FilterOptions struct {
 	Includes *FilterList `json:"include,omitempty"`
 	Excludes *FilterList `json:"exclude,omitempty"`
+	Invert   bool        `json:"invert,omitempty"`
 }
 
 type ProviderGroupOptions struct {

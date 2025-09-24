@@ -9,7 +9,6 @@ import (
 
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-box/provider/manager"
 )
 
 var globalRegistry = &Registry{
@@ -26,7 +25,7 @@ func init() {
 	Register[Hysteria2Option](globalRegistry, C.TypeHysteria2, newClashHysteria2)
 }
 
-func NewClashParser(content []byte) (*manager.Options, error) {
+func NewClashParser(content []byte) (*option.Options, error) {
 	var config *Clash
 	if err := yaml.Unmarshal(content, &config); err != nil {
 		return nil, E.Cause(err, "failed to unmarshal clash config: %w")
@@ -44,11 +43,8 @@ func NewClashParser(content []byte) (*manager.Options, error) {
 		outbounds = append(outbounds, *outbound)
 	}
 
-	options := &manager.Options{
-		Type: C.TpyeClashConfig,
-		Options: option.Options{
-			Outbounds: outbounds,
-		},
+	options := &option.Options{
+		Outbounds: outbounds,
 	}
 	return options, nil
 }
