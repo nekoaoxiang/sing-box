@@ -191,4 +191,6 @@
     <string name="open_settings">Open Settings</string>
     <string name="notification_permission_title">Notification permission</string>
     <string name="notification_permission_required_description">sing-box is unable to show real-time network speeds without the permission to send notifications. Please grant the permission or disable real-time network speeds notification before starting the service.</string>
+
+    <string name="share_with">Share with</string>
 </resources>
